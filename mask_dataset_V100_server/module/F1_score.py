@@ -34,10 +34,10 @@ class F1_Loss(nn.Module):
         y_true = F.one_hot(y_true, self.num_classes).to(torch.float32)
         y_pred = F.softmax(y_pred, dim=1)
         
-        tp = (y_true * y_pred).sum(dim=0).to(torch.float32)
-        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=0).to(torch.float32)
-        fp = ((1 - y_true) * y_pred).sum(dim=0).to(torch.float32)
-        fn = (y_true * (1 - y_pred)).sum(dim=0).to(torch.float32)
+        tp = (y_true * y_pred).sum(dim=1).to(torch.float32)
+        tn = ((1 - y_true) * (1 - y_pred)).sum(dim=1).to(torch.float32)
+        fp = ((1 - y_true) * y_pred).sum(dim=1).to(torch.float32)
+        fn = (y_true * (1 - y_pred)).sum(dim=1).to(torch.float32)
 
         precision = tp / (tp + fp + self.epsilon)
         recall = tp / (tp + fn + self.epsilon)
