@@ -1,0 +1,59 @@
+from torch.utils.data import Dataset
+from tqdm import tqdm
+from PIL import Image
+import numpy as np
+import glob
+import cv2
+import os
+
+from DataProcess import mask, mapping_class
+
+class AllClassDataset(Dataset):
+    '''
+    data : 원하는 데이터만 고른 dataframe -> 전체일수도 / train-valid 나눠서 넣을수도
+    X : image pathes -> 한 개씩 불러올 때: Image
+    y : 0~17 classes
+    '''
+    def __init__(self, base_path, data, transform, train=True):
+        self.train = train
+        self.transform = transform
+        
+        folders = data['path']
+        self.X = []
+        self.y = []
+        
+        for path in tqdm(folders):
+            img_in_folder = glob.glob(os.path.join(base_path, 'images', path, '*'))
+            
+            self.X.extend(img_in_folder)
+            for img in img_in_folder:
+                y = data[data['path'] == path][['id','gender', 'age']]
+                self.y.append(mapping_class(mask(img), y['age'].item(), y['gender'].item()))   
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        ### 각 이미지마다 전처리 가능
+        X = self.transform(cv2.imread(self.X[idx]))
+        y = self.y[idx]
+        if not self.train:
+            return X
+        return X, y
+    
+class TestDataset(Dataset):
+    '''
+    eval/info.csv ImageID
+    '''
+    def __init__(self, base_path, data, transform):
+        self.transform = transform
+        
+        self.X = [os.path.join(base_path, 'images', img_id) for img_id in data['ImageID']]
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        ### 각 이미지마다 전처리 가능
+        X = self.transform(cv2.imread(self.X[idx]))
+        return X
