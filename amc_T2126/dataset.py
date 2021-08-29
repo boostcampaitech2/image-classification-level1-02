@@ -10,6 +10,8 @@ from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
 from torchvision import transforms
 from torchvision.transforms import *
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
@@ -22,6 +24,7 @@ def is_image_file(filename):
 
 class BaseAugmentation:
     def __init__(self, resize, mean, std, **args):
+        self.is_albumentations = False
         self.transform = transforms.Compose([
             Resize(resize, Image.BILINEAR),
             ToTensor(),
@@ -51,6 +54,7 @@ class AddGaussianNoise(object):
 
 class CustomAugmentation:
     def __init__(self, resize, mean, std, **args):
+        self.is_albumentations = False
         self.transform = transforms.Compose([
             CenterCrop((320, 256)),
             Resize(resize, Image.BILINEAR),
@@ -63,6 +67,38 @@ class CustomAugmentation:
     def __call__(self, image):
         return self.transform(image)
 
+
+class StrongAugmentation:
+    def __init__(self, resize, mean, std, **args):
+        # Using Albumentations
+        self.is_albumentations = True
+        self.transform = A.Compose(
+            [
+                A.augmentations.crops.transforms.CenterCrop(400, 300, p=1.0),
+                A.Rotate(limit=40, p=0.9, border_mode=cv2.BORDER_CONSTANT),
+                A.HorizontalFlip(p=0.5),
+                A.RGBShift(r_shift_limit=25, g_shift_limit=25, b_shift_limit=25, p=0.9),
+                A.OneOf([
+                    A.Blur(blur_limit=3, p=0.5),
+                    A.ColorJitter(p=0.5)
+                ], p=0.6),
+                
+                A.OpticalDistortion(p=0.7, border_mode=cv2.BORDER_CONSTANT),
+                A.GridDistortion(p=0.7, border_mode=cv2.BORDER_CONSTANT),
+                A.augmentations.transforms.GaussNoise(var_limit=(1000.0, 5000.0), p=0.5),
+                A.augmentations.transforms.GaussianBlur(),
+                A.augmentations.transforms.Blur(),
+                A.Normalize(
+                    mean=[0.5, 0.5, 0.5],
+                    std=[0.2, 0.2, 0.2],
+                    max_pixel_value=255
+                ),
+                ToTensorV2(),
+            ]
+        )
+    
+    def __call__(self):
+        return self.transform
 
 class MaskLabels(int, Enum):
     MASK = 0
@@ -175,7 +211,7 @@ class MaskBaseDataset(Dataset):
         self.transform = transform
 
     def __getitem__(self, index):
-        assert self.transform is not None, ".set_tranform 메소드를 이용하여 transform 을 주입해주세요"
+        assert self.transform is not None, ".set_transform 메소드를 이용하여 transform 을 주입해주세요"
 
         image = self.read_image(index)
         mask_label = self.get_mask_label(index)
@@ -183,7 +219,11 @@ class MaskBaseDataset(Dataset):
         age_label = self.get_age_label(index)
         multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
 
-        image_transform = self.transform(image)
+        if self.transform.is_albumentations:
+            image_transform = self.transform(image = np.array(image))
+        else:
+            image_transform = self.transform(image)
+            
         return image_transform, multi_class_label
 
     def __len__(self):

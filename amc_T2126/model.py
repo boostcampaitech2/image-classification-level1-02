@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import timm
 
 class BaseModel(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, continue_train_model):
         super().__init__()
 
         self.conv1 = nn.Conv2d(3, 32, kernel_size=7, stride=1)
@@ -35,7 +36,7 @@ class BaseModel(nn.Module):
 
 # Custom Model Template
 class MyModel(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, continue_train_model):
         super().__init__()
 
         """
@@ -49,4 +50,35 @@ class MyModel(nn.Module):
         1. 위에서 정의한 모델 아키텍쳐를 forward propagation 을 진행해주세요
         2. 결과로 나온 output 을 return 해주세요
         """
+        return x
+
+
+class NoisyStudentModel(nn.Module):
+    def __init__(self, num_classes, continue_train_model):
+        super().__init__()
+        self.name = 'NoisyStudent:tf_efficientnet_l2_ns'
+        self.model = timm.create_model('tf_efficientnet_l2_ns', pretrained=True)
+        # 512, 256, 128
+        # Freezing layers
+        for param in model.parameters():
+            param.requires_grad = False
+        
+        # new classifier
+        classifier = nn.Sequential(
+            nn.Linear(5504, 512),
+            F.gelu(),
+            nn.Dropout(p=0.5),
+            nn.Linear(512, 256),
+            F.gelu(),
+            nn.Dropout(p=0.5),
+            nn.Linear(256, 18)
+        )
+
+        model.classifier = classifier
+
+        if continue_train_model:
+            model.load_state_dict(torch.load(continue_train_model))
+
+    def forward(self, x):
+        x = self.model(x)
         return x
