@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import timm
+import os
+from collections import OrderedDict
 
 class BaseModel(nn.Module):
     def __init__(self, num_classes, continue_train_model):
@@ -77,7 +79,15 @@ class NoisyStudentModel(nn.Module):
         self.model.classifier = classifier
 
         if continue_train_model.split('/')[-1] != 'None':
-            self.model.load_state_dict(torch.load(continue_train_model))
+            
+            state_dict = torch.load(continue_train_model)
+            new_state_dict = OrderedDict()
+
+            for k, v in state_dict.items():
+                name = k.replace('model.', '')
+                new_state_dict[name] = v
+
+            self.model.load_state_dict(new_state_dict)
 
     def forward(self, x):
         x = self.model(x)

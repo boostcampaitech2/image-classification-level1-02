@@ -131,12 +131,15 @@ def train(data_dir, model_dir, args):
 
     # -- model
     model_module = getattr(import_module("model"), args.model)  # default: BaseModel
+    # print(model_module)
+    # # print(import_module(args.model, package="model"))
+    # print(Path)
     model = model_module(
         num_classes=num_classes,
         continue_train_model=args.continue_train_model
     ).to(device)
     model_name = model.name
-    model = torch.nn.DataParallel(model)
+    # model = torch.nn.DataParallel(model)
 
     # -- loss & metric
     criterion = create_criterion(args.criterion)  # default: cross_entropy
@@ -234,7 +237,8 @@ def train(data_dir, model_dir, args):
             best_val_loss = min(best_val_loss, val_loss)
             if val_acc > best_val_acc:
                 print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
-                torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
+                # torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
+                torch.save(model.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
                 best_val_acc = val_acc
             # torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-last.pt")
             print(
