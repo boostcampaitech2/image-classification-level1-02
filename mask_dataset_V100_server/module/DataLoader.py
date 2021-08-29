@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 
-from DataFrameProcessing import get_total_label_data_frame
+from DataFrameProcessing import get_total_label_data_frame, total_label_balance
 
 # torch.utils.data.Dataset
 class MaskDataset(Dataset):
@@ -39,6 +39,9 @@ class MaskDataset(Dataset):
         if target == "total_label":
             df = get_total_label_data_frame(df)
             
+            # data imbalance technique
+            df = total_label_balance(df)
+            
             self.classes = [
                 "female_[0,30)_mask"       , "male_[0,30)_mask",        # 0, 1
                 "female_[0,30)_normal"     , "male_[0,30)_normal",      # 2, 3
@@ -54,6 +57,8 @@ class MaskDataset(Dataset):
             ]
             
             self.X_y = self.total_label(df)
+        
+        
         elif target == "gender":
             #= Gender to number ====================================
             df["GenderNum"] = df["gender"].map({"female" : 0, "male" : 1})
@@ -79,17 +84,6 @@ class MaskDataset(Dataset):
             template += "[gender, age, mask, only_normal]."
             raise ValueError(template%srt(target))
         
-        
-        #= Mode Selection ======================================
-        if target == "mask":
-            self.X_y = self.mask_label(df)
-        elif target == "gender":
-            
-        
-        '''deprecated
-        elif target == "only_normal":
-            self.X, self.y = self.only_normal(df)
-        '''
         #=======================================================
         
         if realign:
@@ -99,16 +93,18 @@ class MaskDataset(Dataset):
         print("mask dataset is loading ::::")
         #= Mask : Mask, Correct, Incorrect =====================
         total_image_label, mean_image = [], []
-        columns = ["FileName","Gender","AgeBand","MaskState"]
-        for f_name, G, A, M in tqdm(df[columns].to_numpy()):
+        columns = ["FileName","Gender","AgeBand","MaskState","Label"]
+        for f_name, G, A, M, L in tqdm(df[columns].to_numpy()):
             image = Image.open(self.images_path + f_name)
             image = self.pre_transforms(image)
+            
+            #mean_image
             mean_image.append(np.array(image))
             
             # label
-            self.classes.index("_".join([G, A, M]))
+            label = self.classes.index(L)
             
-            # inage + label
+            # image + label
             total_image_label.append((image,label))
                     
         self.mean_image = sum(mean_image)/len(mean_image)
@@ -130,21 +126,6 @@ class MaskDataset(Dataset):
         return total_image_label
         #=======================================================
     
-    '''deprecated
-    def only_normal(self,df):
-        #= No label ============================================
-        total_im_path = []
-        for path in df["path"]:
-            path = "./train/images/" + path + "/"
-            for im_name in os.listdir(path):
-                if not im_name.startswith(".") and\
-                re.search("normal", im_name):
-                    # image path
-                    total_im_path.append(path + im_name)
-                    
-        return total_im_path, None
-        #=======================================================
-    '''
     def __len__(self):
         return len(self.X_y)
         

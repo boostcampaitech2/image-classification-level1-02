@@ -12,10 +12,11 @@ def get_total_label_data_frame(df)(df):
         labels = ["[0,30)","[30,60)" , "[60,inf)"]
     )
     new_df = {
-        "Gender" : [],
+        "Gender"    : [],
         "AgeBand"   : [],
-        "MaskState"  : [],
+        "MaskState" : [],
         "FileName"  : [],
+        "Label"     : []
     }
     for G, A, p in df[["gender", "AgeBand", "path"]].to_numpy():
         path = im_path + p + "/"
@@ -33,5 +34,25 @@ def get_total_label_data_frame(df)(df):
             new_df["AgeBand"].append(A)
             new_df["MaskState"].append(M)
             new_df["FileName"].append(p + "/" + im_name)
+            new_df["Label"].append("_".join([G, A, M]))
     
     return pd.DataFrame(new_df)
+
+def total_label_balance(df):
+    '''
+    Extract a 100 subsamples from each total_label.
+    The minimum sample labal is male_[60,inf)_(mask,normal,incorrect)
+    and its number of samples is 83.
+    This function apply 100 subsampling for each labels except male_[60,inf)_(m,n,i)
+    '''
+    
+    subsample_list = []
+    for label in df["Label"].unique():
+        _df = df[df["Label"] == label]
+        try:
+            subsample_list.append(_df.sample(100))
+        except:
+            subsample_list.append(_df.sample(len(_df)))
+    df = pd.concat(subsample_list, axis = 0)
+    df = df.sample(len(df)) # suffle
+    return df
