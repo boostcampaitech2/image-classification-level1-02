@@ -95,22 +95,19 @@ class MaskDataset(Dataset):
         if realign:
             shuffle(self.X_y)
         
-    def total_label(self,df):
+    def total_label(self, df):
         print("mask dataset is loading ::::")
         #= Mask : Mask, Correct, Incorrect =====================
         total_image_label, mean_image = [], []
-        for f_name in tqdm(df["FileName"]):
+        columns = ["FileName","Gender","AgeBand","MaskState"]
+        for f_name, G, A, M in tqdm(df[columns].to_numpy()):
             image = Image.open(self.images_path + f_name)
             image = self.pre_transforms(image)
             mean_image.append(np.array(image))
             
             # label
-            if re.search("normal", im_name):
-                label = 1
-            elif re.search("incorrect_mask", im_name):
-                label = 2
-            else: # re.search("mask[1-5]", im_name):
-                label = 0
+            self.classes.index("_".join([G, A, M]))
+            
             # inage + label
             total_image_label.append((image,label))
                     
@@ -125,11 +122,10 @@ class MaskDataset(Dataset):
         for path, gen_num in tqdm(df[["path", "GenderNum"]].to_numpy()):
             path = self.images_path + path + "/"
             for im_name in os.listdir(path):
-                if not im_name.startswith("."):
-                    image = Image.open(path + im_name)
-                    image = self.pre_transforms(image)
-                    mean_image.append(np.array(image))
-                    total_image_label.append((image, gen_num))
+                image = Image.open(path + im_name)
+                image = self.pre_transforms(image)
+                mean_image.append(np.array(image))
+                total_image_label.append((image, label))
         self.mean_image = sum(mean_image)/len(mean_image)
         return total_image_label
         #=======================================================
