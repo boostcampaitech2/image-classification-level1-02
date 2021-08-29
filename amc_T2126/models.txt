@@ -1,0 +1,1 @@
+python train.py --epoch 5 --augmentation StrongAugmentation --batch_size 128 --valid_batch_size 128 --model NoisyStudentModel --optimizer Adam --lr 0.0001 --criterion focal --lr_patience 5

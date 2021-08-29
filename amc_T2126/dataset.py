@@ -12,6 +12,7 @@ from torchvision import transforms
 from torchvision.transforms import *
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+import cv2
 
 IMG_EXTENSIONS = [
     ".jpg", ".JPG", ".jpeg", ".JPEG", ".png",
@@ -89,16 +90,16 @@ class StrongAugmentation:
                 A.augmentations.transforms.GaussianBlur(),
                 A.augmentations.transforms.Blur(),
                 A.Normalize(
-                    mean=[0.5, 0.5, 0.5],
-                    std=[0.2, 0.2, 0.2],
+                    mean=mean,
+                    std=std,
                     max_pixel_value=255
                 ),
                 ToTensorV2(),
             ]
         )
     
-    def __call__(self):
-        return self.transform
+    def __call__(self, image):
+        return self.transform(image=np.array(image))
 
 class MaskLabels(int, Enum):
     MASK = 0
@@ -219,11 +220,8 @@ class MaskBaseDataset(Dataset):
         age_label = self.get_age_label(index)
         multi_class_label = self.encode_multi_class(mask_label, gender_label, age_label)
 
-        if self.transform.is_albumentations:
-            image_transform = self.transform(image = np.array(image))
-        else:
-            image_transform = self.transform(image)
-            
+        image_transform = self.transform(image)
+
         return image_transform, multi_class_label
 
     def __len__(self):

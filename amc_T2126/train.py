@@ -11,7 +11,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import StepLR, ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -133,8 +133,9 @@ def train(data_dir, model_dir, args):
     model_module = getattr(import_module("model"), args.model)  # default: BaseModel
     model = model_module(
         num_classes=num_classes,
-        continue_train_model=save_dir+'/'+args.continue_train_model
+        continue_train_model=args.continue_train_model
     ).to(device)
+    model_name = model.name
     model = torch.nn.DataParallel(model)
 
     # -- loss & metric
@@ -145,7 +146,9 @@ def train(data_dir, model_dir, args):
         lr=args.lr,
         weight_decay=5e-4
     )
-    scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+    
+    # scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
+    scheduler = ReduceLROnPlateau(optimizer, patience=args.lr_patience, factor=0.5, verbose=True)
 
     # -- logging
     logger = SummaryWriter(log_dir=save_dir)
@@ -161,7 +164,11 @@ def train(data_dir, model_dir, args):
         matches = 0
         for idx, train_batch in enumerate(train_loader):
             inputs, labels = train_batch
-            inputs = inputs.to(device)
+
+            if transform.is_albumentations == True:
+                    inputs = inputs['image'].to(device)
+            else:
+                inputs = inputs.to(device)
             labels = labels.to(device)
 
             optimizer.zero_grad()
@@ -189,7 +196,7 @@ def train(data_dir, model_dir, args):
                 loss_value = 0
                 matches = 0
 
-        scheduler.step()
+        
 
         # val loop
         with torch.no_grad():
@@ -200,7 +207,11 @@ def train(data_dir, model_dir, args):
             figure = None
             for val_batch in val_loader:
                 inputs, labels = val_batch
-                inputs = inputs.to(device)
+
+                if transform.is_albumentations == True:
+                    inputs = inputs['image'].to(device)
+                else:
+                    inputs = inputs.to(device)
                 labels = labels.to(device)
 
                 outs = model(inputs)
@@ -223,9 +234,9 @@ def train(data_dir, model_dir, args):
             best_val_loss = min(best_val_loss, val_loss)
             if val_acc > best_val_acc:
                 print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
-                torch.save(model.module.state_dict(), f"{save_dir}/{model.name}-{epoch}-best.pt")
+                torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
                 best_val_acc = val_acc
-            torch.save(model.module.state_dict(), f"{save_dir}/{model.name}-last.pt")
+            # torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-last.pt")
             print(
                 f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
                 f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
@@ -233,15 +244,17 @@ def train(data_dir, model_dir, args):
             logger.add_scalar("Val/loss", val_loss, epoch)
             logger.add_scalar("Val/accuracy", val_acc, epoch)
             logger.add_figure("results", figure, epoch)
+
+            scheduler.step(val_loss)
             print()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    from dotenv import load_dotenv
+    # from dotenv import load_dotenv
     import os
-    load_dotenv(verbose=True)
+    # load_dotenv(verbose=True)
 
     # Data and model checkpoints directories
     parser.add_argument('--seed', type=int, default=42, help='random seed (default: 42)')
@@ -250,14 +263,14 @@ if __name__ == '__main__':
     parser.add_argument('--augmentation', type=str, default='BaseAugmentation', help='data augmentation type (default: BaseAugmentation)')
     parser.add_argument("--resize", nargs="+", type=list, default=[128, 96], help='resize size for image when training')
     parser.add_argument('--batch_size', type=int, default=64, help='input batch size for training (default: 64)')
-    parser.add_argument('--valid_batch_size', type=int, default=1000, help='input batch size for validing (default: 1000)')
+    parser.add_argument('--valid_batch_size', type=int, default=256, help='input batch size for validing (default: 256)')
     parser.add_argument('--model', type=str, default='BaseModel', help='model type (default: BaseModel)')
     parser.add_argument('--continue_train_model', type=str, default='None', help='continuing model training (default:None)')
     parser.add_argument('--optimizer', type=str, default='SGD', help='optimizer type (default: SGD)')
     parser.add_argument('--lr', type=float, default=1e-3, help='learning rate (default: 1e-3)')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='ratio for validaton (default: 0.2)')
     parser.add_argument('--criterion', type=str, default='cross_entropy', help='criterion type (default: cross_entropy)')
-    parser.add_argument('--lr_decay_step', type=int, default=20, help='learning rate scheduler deacy step (default: 20)')
+    parser.add_argument('--lr_patience', type=int, default=5, help='learning rate patience (default: 5)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')
 

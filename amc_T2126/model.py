@@ -58,26 +58,26 @@ class NoisyStudentModel(nn.Module):
         super().__init__()
         self.name = 'NoisyStudent:tf_efficientnet_l2_ns'
         self.model = timm.create_model('tf_efficientnet_l2_ns', pretrained=True)
-        # 512, 256, 128
+        
         # Freezing layers
-        for param in model.parameters():
+        for param in self.model.parameters():
             param.requires_grad = False
         
         # new classifier
         classifier = nn.Sequential(
             nn.Linear(5504, 512),
-            F.gelu(),
+            nn.GELU(),
             nn.Dropout(p=0.5),
             nn.Linear(512, 256),
-            F.gelu(),
+            nn.GELU(),
             nn.Dropout(p=0.5),
             nn.Linear(256, 18)
         )
 
-        model.classifier = classifier
+        self.model.classifier = classifier
 
-        if continue_train_model:
-            model.load_state_dict(torch.load(continue_train_model))
+        if continue_train_model.split('/')[-1] != 'None':
+            self.model.load_state_dict(torch.load(continue_train_model))
 
     def forward(self, x):
         x = self.model(x)
