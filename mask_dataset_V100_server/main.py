@@ -42,10 +42,10 @@ from torch.utils.tensorboard import SummaryWriter
 SEED          = 777
 DEVICE        = torch.device("cuda:0")
 BATCH_SIZE    = 128
-LEARNING_RATE = 0.00001
-WEIGHT_DECAY  = 0.01
-LOSS_FUNCTION = "F1loss"#"CrossEntropy"
-TOTAL_EPOCH   = 50 #1000000
+LEARNING_RATE = 0.0001
+WEIGHT_DECAY  = 0.1
+LOSS_FUNCTION = "p = 0.1"#"F1loss"#"CrossEntropy"
+TOTAL_EPOCH   = 1000000
 IMAGE_SIZE    = 128
 SUB_MEAN      = False #True
 exp_num       = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
@@ -221,6 +221,9 @@ for ep in range(TOTAL_EPOCH + 1):
                 loss_val = loss_val
             elif LOSS_FUNCTION == "F1loss":
                 loss_val = f1_val
+            elif LOSS_FUNCTION.startswith("p"):
+                p = float(LOSS_FUNCTION[4:])
+                loss_val = (1-p)*loss_val + p*f1_val
             opt.zero_grad()
             loss_val.backward()
             opt.step()

@@ -9,6 +9,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 
+from DataFrameProcessing import get_total_label_data_frame
+
 class ImageDataset(Dataset):
     def __init__(self, data_path, transforms):
         df = pd.read_csv(
@@ -133,18 +135,42 @@ class MaskDataset(Dataset):
             print(":"*15,"DEBUG_MODE",":"*15)
             df = df.sample(10)
         
-        if target == "gender":
+        if target == "total_label":
+            df = get_total_label_data_frame(df)
+            
+            self.classes = [
+                "female_[0,30)_mask"       , "male_[0,30)_mask",        # 0, 1
+                "female_[0,30)_normal"     , "male_[0,30)_normal",      # 2, 3
+                "female_[0,30)_incorrect"  , "male_[0,30)_incorrect",   # 4, 5
+                
+                "female_[30,60)_mask"      , "male_[30,60)_mask",       # 6, 7
+                "female_[30,60)_normal"    , "male_[30,60)_normal",     # 8, 9
+                "female_[30,60)_incorrect" , "male_[30,60)_incorrect",  # 10, 11
+                
+                "female_[60,inf)_mask"     , "male_[60,inf)_mask",      # 12, 13
+                "female_[60,inf)_normal"   , "male_[60,inf)_normal",    # 14, 15
+                "female_[60,inf)_incorrect", "male_[60,inf)_incorrect", # 16, 17
+            ]
+            
+            self.X_y = self.total_label(df)
+        elif target == "gender":
             #= Gender to number ====================================
             df["GenderNum"] = df["gender"].map({"female" : 0, "male" : 1})
+            self.classes = ["female", "male"]
+            
+            self.X_y = self.gender_label(df)
             #=======================================================
         elif target == "age":
             #= AgeBand to number ===================================
             df["AgeBand"] = pd.cut(
                 df["age"],
-                bins = [df["age"].min(),30,df["age"].max(),10000],
+                bins = [df["age"].min(), 30, 60, 10000],
                 right = False,
                 labels = [0, 1, 2]
             )
+            self.classes = ["<30", ">= 30 and < 60", ">= 60"]
+            
+            # ToDo : make self.age_label(df)
             #=======================================================
         else:
             template = "Invalid target : You set a target as %s. "
@@ -157,7 +183,7 @@ class MaskDataset(Dataset):
         if target == "mask":
             self.X_y = self.mask_label(df)
         elif target == "gender":
-            self.X_y = self.gender_label(df)
+            
         
         '''deprecated
         elif target == "only_normal":
@@ -168,26 +194,24 @@ class MaskDataset(Dataset):
         if realign:
             shuffle(self.X_y)
         
-    def mask_label(self,df):
+    def total_label(self,df):
         print("mask dataset is loading ::::")
         #= Mask : Mask, Correct, Incorrect =====================
         total_image_label, mean_image = [], []
-        for path in tqdm(df["path"]):
-            path = self.images_path + path + "/"
-            for im_name in os.listdir(path):
-                if not im_name.startswith("."):
-                    # image
-                    image = Image.open(path + im_name)
-                    mean_image.append(np.array(image))
-                    # label
-                    if re.search("normal", im_name):
-                        label = 1
-                    elif re.search("incorrect_mask", im_name):
-                        label = 2
-                    else: # re.search("mask[1-5]", im_name):
-                        label = 0
-                    # inage + label
-                    total_image_label.append((image,label))
+        for f_name in tqdm(df["FileName"]):
+            image = Image.open(self.images_path + f_name)
+            image = self.pre_transforms(image)
+            mean_image.append(np.array(image))
+            
+            # label
+            if re.search("normal", im_name):
+                label = 1
+            elif re.search("incorrect_mask", im_name):
+                label = 2
+            else: # re.search("mask[1-5]", im_name):
+                label = 0
+            # inage + label
+            total_image_label.append((image,label))
                     
         self.mean_image = sum(mean_image)/len(mean_image)
         return total_image_label
