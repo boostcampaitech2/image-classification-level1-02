@@ -3,7 +3,7 @@ import pandas as pd
 
 
 
-def get_total_label_data_frame(df)(df):
+def get_total_label_data_frame(df,im_path):
 
     df["AgeBand"] = pd.cut(
         df["age"],

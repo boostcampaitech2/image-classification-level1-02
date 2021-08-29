@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 
-from DataFrameProcessing import get_total_label_data_frame, total_label_balance
+from .DataFrameProcessing import get_total_label_data_frame, total_label_balance
 
 # torch.utils.data.Dataset
 class MaskDataset(Dataset):
@@ -37,7 +37,7 @@ class MaskDataset(Dataset):
             df = df.sample(10)
         
         if target == "total_label":
-            df = get_total_label_data_frame(df)
+            df = get_total_label_data_frame(df, images_path) 
             
             # data imbalance technique
             df = total_label_balance(df)
