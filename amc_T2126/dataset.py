@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Tuple, List
 
 import numpy as np
+import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import Dataset, Subset, random_split
@@ -89,6 +90,7 @@ class StrongAugmentation:
                 A.augmentations.transforms.GaussNoise(var_limit=(1000.0, 5000.0), p=0.5),
                 A.augmentations.transforms.GaussianBlur(),
                 A.augmentations.transforms.Blur(),
+                
                 A.Normalize(
                     mean=mean,
                     std=std,
@@ -334,18 +336,65 @@ class MaskSplitByProfileDataset(MaskBaseDataset):
 class TestDataset(Dataset):
     def __init__(self, img_paths, resize, mean=(0.548, 0.504, 0.479), std=(0.237, 0.247, 0.246)):
         self.img_paths = img_paths
-        self.transform = transforms.Compose([
-            Resize(resize, Image.BILINEAR),
-            ToTensor(),
-            Normalize(mean=mean, std=std),
-        ])
+        # self.transform = transforms.Compose([
+        #     Resize(resize, Image.BILINEAR),
+        #     ToTensor(),
+        #     Normalize(mean=mean, std=std),
+        # ])
+        self.is_albumentations = True
+        self.transform = A.Compose(
+            [
+                A.augmentations.crops.transforms.CenterCrop(400, 300, p=1.0),
+                A.Normalize(
+                    mean=mean,
+                    std=std,
+                    max_pixel_value=255
+                ),
+                ToTensorV2(),
+            ]
+        )
 
     def __getitem__(self, index):
         image = Image.open(self.img_paths[index])
 
         if self.transform:
-            image = self.transform(image)
+            # image = self.transform(image)
+            return self.transform(image=np.array(image))
         return image
 
     def __len__(self):
         return len(self.img_paths)
+
+
+# Extra data from evaluation data(SSL)
+class ExtraDataset(Dataset):
+    def __init__(self):
+        df = pd.read_csv('extraDataset.csv')
+        
+        self.path ='/opt/ml/input/data/eval/images' + df['ImageID']
+        self.path = self.path.reset_index(drop=True)
+        self.label = df['ans'].reset_index(drop=True)
+
+    def __len__(self):
+        return len(self.label)
+
+
+    def __getitem__(self, index):
+        image = Image.open(self.paths[index])
+        image_transform = self.transform(image)
+
+        return image_transform, self.label[index]
+    
+    def set_transform(self, transform):
+        self.transform = transform
+    
+# dataset for concatinate datasets(SSL)
+class ConcatDataset(Dataset):
+    def __init__(self, *datasets):
+        self.datasets = datasets
+    
+    def __getitem__(self, index):
+        return tuple(d[index] for d in self.datasets)
+    
+    def __len__(self):
+        return min(len(d) for d in self.datasets)

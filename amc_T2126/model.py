@@ -79,6 +79,18 @@ class NoisyStudentModel(nn.Module):
         self.model.classifier = classifier
 
         if continue_train_model.split('/')[-1] != 'None':
+
+            # ================ unfreezing layers close to the output ==============
+            for param in self.model.blocks[6].parameters():
+                param.requires_grad = True
+
+            for param in self.model.blocks[5].parameters():
+                param.requires_grad = True
+            
+            for param in self.model.conv_head.parameters():
+                param.requires_grad=True
+            # ================= unfreezing ends ====================================
+
             
             state_dict = torch.load(continue_train_model)
             new_state_dict = OrderedDict()

@@ -93,7 +93,7 @@ def train(data_dir, model_dir, args):
     device = torch.device("cuda" if use_cuda else "cpu")
 
     # -- dataset
-    dataset_module = getattr(import_module("dataset"), args.dataset)  # default: BaseAugmentation
+    dataset_module = getattr(import_module("dataset"), args.dataset)  # default: MaskBaseDataset
     dataset = dataset_module(
         data_dir=data_dir,
     )
@@ -111,14 +111,33 @@ def train(data_dir, model_dir, args):
     # -- data_loader
     train_set, val_set = dataset.split_dataset()
 
-    train_loader = DataLoader(
-        train_set,
-        batch_size=args.batch_size,
-        num_workers=multiprocessing.cpu_count()//2,
-        shuffle=True,
-        pin_memory=use_cuda,
-        drop_last=True,
-    )
+    # if SSL is to be used
+    if args.SSL !="None":
+        extraDataset = getattr(import_module('dataset'), 'ExtraDataset')
+        extraDataset.set_transform(transform)
+
+        concatDataset = getattr(import_module('dataset'), 'ConcatDataset')
+    
+        train_loader = DataLoader(
+            concatDataset(
+                dataset,
+                extraDataset,
+            ),
+            batch_size=args.batch_size,
+            num_workers=multiprocessing.cpu_count()//2,
+            shuffle=True,
+            pin_memory=use_cuda,
+            drop_last=True,
+        )
+    else:
+        train_loader = DataLoader(
+            train_set,
+            batch_size=args.batch_size,
+            num_workers=multiprocessing.cpu_count()//2,
+            shuffle=True,
+            pin_memory=use_cuda,
+            drop_last=True,
+        )
 
     val_loader = DataLoader(
         val_set,
@@ -277,6 +296,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr_patience', type=int, default=5, help='learning rate patience (default: 5)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')
+    parser.add_argument('--SSL', type='str', default='None', help='Use SSL (default:None)')
 
     # Container environment
     parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images'))
