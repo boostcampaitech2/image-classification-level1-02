@@ -179,6 +179,8 @@ def train(data_dir, model_dir, args):
 
     best_val_acc = 0
     best_val_loss = np.inf
+    early_stopping_thresh = args.early_stopping_thresh
+    loss_higher_counter = 0
     for epoch in range(args.epochs):
         # train loop
         model.train()
@@ -210,7 +212,7 @@ def train(data_dir, model_dir, args):
                 current_lr = get_lr(optimizer)
                 print(
                     f"Epoch[{epoch}/{args.epochs}]({idx + 1}/{len(train_loader)}) || "
-                    f"training loss {train_loss:4.4} || training accuracy {train_acc:4.2%} || lr {current_lr}"
+                    f"training loss {train_loss:8.6} || training accuracy {train_acc:8.6%} || lr {current_lr}"
                 )
                 logger.add_scalar("Train/loss", train_loss, epoch * len(train_loader) + idx)
                 logger.add_scalar("Train/accuracy", train_acc, epoch * len(train_loader) + idx)
@@ -254,15 +256,18 @@ def train(data_dir, model_dir, args):
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
             best_val_loss = min(best_val_loss, val_loss)
-            if val_acc > best_val_acc:
-                print(f"New best model for val accuracy : {val_acc:4.2%}! saving the best model..")
+            if best_val_loss > val_loss:
+                print(f"New best model for val loss : {val_acc:8.6%}! saving the best model..")
                 # torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
                 torch.save(model.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
                 best_val_acc = val_acc
+                loss_higher_counter = 0
+            else:
+                loss_higher_counter += 1
             # torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-last.pt")
             print(
-                f"[Val] acc : {val_acc:4.2%}, loss: {val_loss:4.2} || "
-                f"best acc : {best_val_acc:4.2%}, best loss: {best_val_loss:4.2}"
+                f"[Val] acc : {val_acc:8.6%}, loss: {val_loss:8.6} || "
+                f"best acc : {best_val_acc:8.6%}, best loss: {best_val_loss:8.6}"
             )
             logger.add_scalar("Val/loss", val_loss, epoch)
             logger.add_scalar("Val/accuracy", val_acc, epoch)
@@ -270,6 +275,9 @@ def train(data_dir, model_dir, args):
 
             scheduler.step(val_loss)
             print()
+
+        if early_stopping_thresh == loss_higher_counter:
+            break
 
 
 if __name__ == '__main__':

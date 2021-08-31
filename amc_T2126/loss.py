@@ -22,7 +22,7 @@ class FocalLoss(nn.Module):
             reduction=self.reduction
         )
 
-
+# https://jeonghwarr.github.io/tips/label_smoothing/
 class LabelSmoothingLoss(nn.Module):
     def __init__(self, classes=3, smoothing=0.0, dim=-1):
         super(LabelSmoothingLoss, self).__init__()
