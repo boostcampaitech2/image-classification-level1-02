@@ -103,6 +103,26 @@ class StrongAugmentation:
     def __call__(self, image):
         return self.transform(image=np.array(image))
 
+class WeakAugmentation:
+    def __init__(self, resize, mean, std, **args):
+        # Using Albumentations
+        self.is_albumentations = True
+        self.transform = A.Compose(
+            [
+                A.augmentations.crops.transforms.CenterCrop(400, 300, p=1.0),
+                A.HorizontalFlip(p=0.5), 
+                A.Normalize(
+                    mean=mean,
+                    std=std,
+                    max_pixel_value=255
+                ),
+                ToTensorV2(),
+            ]
+        )
+    
+    def __call__(self, image):
+        return self.transform(image=np.array(image))
+
 class MaskLabels(int, Enum):
     MASK = 0
     INCORRECT = 1
