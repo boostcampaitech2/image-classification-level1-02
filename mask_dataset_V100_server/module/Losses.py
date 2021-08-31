@@ -45,3 +45,19 @@ class CostumLoss:
         if loss_fn_name == "F1" :
             return F1_Loss(self.num_classes, test = self.test).to(self.device)
         return getattr(nn, loss_fn_name)().to(self.device)
+
+
+
+'''
+import random
+label_p = random.uniform(0,1)
+X = (1 - label_p) * _X[:hp["BATCH_SIZE"]] + label_p * _X[hp["BATCH_SIZE"]:]
+y = ((1 - label_p) * F.one_hot(_y[:hp["BATCH_SIZE"]],18) + \
+     label_p * F.one_hot(_y[:hp["BATCH_SIZE"]],18))
+
+CrossEntropyLossForMultiLabel
+def loss(pred, target):
+    P = F.softmax(target, dim = 1)
+    log_Q = F.log_softmax(pred, dim = 1)
+    return -1 * torch.mean( P * log_Q)
+'''

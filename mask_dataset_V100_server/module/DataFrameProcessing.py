@@ -45,7 +45,7 @@ def total_label_balance(df):
     and its number of samples is 83.
     This function apply 100 subsampling for each labels except male_[60,inf)_(m,n,i)
     '''
-    
+    # ToDo : 마스크 라벨에 사람이 중복되게 들어가있을 가능성이 있다.
     subsample_list = []
     for label in df["Label"].unique():
         _df = df[df["Label"] == label]
