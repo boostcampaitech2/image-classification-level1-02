@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 1 데이터 분석 및 ToDoList
 
 *./mask_dataset_V100_server/EDA.ipynb 파일 참고*
@@ -35,3 +36,6 @@
 
 ## DataLoader 설계
   - pre-transform과 tranform을 나눠서 동작시키면 feed에서 더 빠르게 연산이 가능하다.
+=======
+# image-classification-level1-02
+>>>>>>> boos2/Sang-hyun
