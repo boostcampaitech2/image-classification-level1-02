@@ -113,15 +113,17 @@ def train(data_dir, model_dir, args):
 
     # if SSL is to be used
     if args.SSL !="None":
-        extraDataset = getattr(import_module('dataset'), 'ExtraDataset')
-        extraDataset.set_transform(transform)
+        ExtraDataset = getattr(import_module('dataset'), 'ExtraDataset')
+        extraDataset = ExtraDataset()
+        extraDataset.set_transform(transform=transform)
 
-        concatDataset = getattr(import_module('dataset'), 'ConcatDataset')
     
         train_loader = DataLoader(
-            concatDataset(
-                dataset,
-                extraDataset,
+            torch.utils.data.ConcatDataset(
+                [
+                    train_set,
+                    extraDataset,
+                ]
             ),
             batch_size=args.batch_size,
             num_workers=multiprocessing.cpu_count()//2,
@@ -192,7 +194,7 @@ def train(data_dir, model_dir, args):
             inputs, labels = train_batch
 
             if transform.is_albumentations == True:
-                    inputs = inputs['image'].to(device)
+                inputs = inputs['image'].to(device)
             else:
                 inputs = inputs.to(device)
             labels = labels.to(device)

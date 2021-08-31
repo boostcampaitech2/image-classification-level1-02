@@ -371,7 +371,7 @@ class ExtraDataset(Dataset):
     def __init__(self):
         df = pd.read_csv('extraDataset.csv')
         
-        self.path ='/opt/ml/input/data/eval/images' + df['ImageID']
+        self.path ='/opt/ml/input/data/eval/images/' + df['ImageID']
         self.path = self.path.reset_index(drop=True)
         self.label = df['ans'].reset_index(drop=True)
 
@@ -380,7 +380,7 @@ class ExtraDataset(Dataset):
 
 
     def __getitem__(self, index):
-        image = Image.open(self.paths[index])
+        image = Image.open(self.path[index])
         image_transform = self.transform(image)
 
         return image_transform, self.label[index]
@@ -388,13 +388,3 @@ class ExtraDataset(Dataset):
     def set_transform(self, transform):
         self.transform = transform
     
-# dataset for concatinate datasets(SSL)
-class ConcatDataset(Dataset):
-    def __init__(self, *datasets):
-        self.datasets = datasets
-    
-    def __getitem__(self, index):
-        return tuple(d[index] for d in self.datasets)
-    
-    def __len__(self):
-        return min(len(d) for d in self.datasets)
