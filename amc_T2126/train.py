@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from dataset import MaskBaseDataset
-from loss import create_criterion
+from loss import create_criterion, F1Loss
 
 
 def seed_everything(seed):
@@ -168,7 +168,8 @@ def train(data_dir, model_dir, args):
         lr=args.lr,
         weight_decay=5e-4
     )
-    
+    f1loss = F1Loss(classes=18)
+
     # scheduler = StepLR(optimizer, args.lr_decay_step, gamma=0.5)
     scheduler = ReduceLROnPlateau(optimizer, patience=args.lr_patience, factor=0.5, verbose=True)
 
@@ -186,6 +187,7 @@ def train(data_dir, model_dir, args):
         model.train()
         loss_value = 0
         matches = 0
+        f1_loss_value = 0
         for idx, train_batch in enumerate(train_loader):
             inputs, labels = train_batch
 
@@ -201,6 +203,10 @@ def train(data_dir, model_dir, args):
             preds = torch.argmax(outs, dim=-1)
             loss = criterion(outs, labels)
 
+            # f1_loss
+            f1_loss = f1loss(outs, labels)
+            f1_loss_value += 1 - f1_loss.item()
+
             loss.backward()
             optimizer.step()
 
@@ -209,15 +215,19 @@ def train(data_dir, model_dir, args):
             if (idx + 1) % args.log_interval == 0:
                 train_loss = loss_value / args.log_interval
                 train_acc = matches / args.batch_size / args.log_interval
+                train_f1_loss = f1_loss_value / args.log_interval
                 current_lr = get_lr(optimizer)
                 print(
                     f"Epoch[{epoch}/{args.epochs}]({idx + 1}/{len(train_loader)}) || "
-                    f"training loss {train_loss:8.6} || training accuracy {train_acc:8.6%} || lr {current_lr}"
+                    f"training loss {train_loss:8.6} || training accuracy {train_acc:8.6%} || lr {current_lr} || "
+                    f"training f1 loss {train_f1_loss:8.6}"
                 )
                 logger.add_scalar("Train/loss", train_loss, epoch * len(train_loader) + idx)
                 logger.add_scalar("Train/accuracy", train_acc, epoch * len(train_loader) + idx)
+                logger.add_scalar("Train/f1 loss", train_f1_loss, epoch * len(train_loader) + idx)
 
                 loss_value = 0
+                f1_loss_value = 0
                 matches = 0
 
         
@@ -228,6 +238,7 @@ def train(data_dir, model_dir, args):
             model.eval()
             val_loss_items = []
             val_acc_items = []
+            val_f1_loss_items = []
             figure = None
             for val_batch in val_loader:
                 inputs, labels = val_batch
@@ -245,6 +256,7 @@ def train(data_dir, model_dir, args):
                 acc_item = (labels == preds).sum().item()
                 val_loss_items.append(loss_item)
                 val_acc_items.append(acc_item)
+                val_f1_loss_items.append(f1loss(outs, labels).item())
 
                 if figure is None:
                     inputs_np = torch.clone(inputs).detach().cpu().permute(0, 2, 3, 1).numpy()
@@ -255,8 +267,10 @@ def train(data_dir, model_dir, args):
 
             val_loss = np.sum(val_loss_items) / len(val_loader)
             val_acc = np.sum(val_acc_items) / len(val_set)
+            val_f1_loss = 1 - np.sum(val_f1_loss_items) / len(val_loader)
+            past_best_val_loss = best_val_loss
             best_val_loss = min(best_val_loss, val_loss)
-            if best_val_loss > val_loss:
+            if best_val_loss < past_best_val_loss:
                 print(f"New best model for val loss : {val_acc:8.6%}! saving the best model..")
                 # torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
                 torch.save(model.state_dict(), f"{save_dir}/{model_name}-{epoch}-best.pt")
@@ -267,10 +281,12 @@ def train(data_dir, model_dir, args):
             # torch.save(model.module.state_dict(), f"{save_dir}/{model_name}-last.pt")
             print(
                 f"[Val] acc : {val_acc:8.6%}, loss: {val_loss:8.6} || "
+                f"f1 loss: {val_f1_loss:8.6} || "
                 f"best acc : {best_val_acc:8.6%}, best loss: {best_val_loss:8.6}"
             )
             logger.add_scalar("Val/loss", val_loss, epoch)
             logger.add_scalar("Val/accuracy", val_acc, epoch)
+            logger.add_scalar("Val/f1 loss", val_f1_loss, epoch)
             logger.add_figure("results", figure, epoch)
 
             scheduler.step(val_loss)
@@ -304,7 +320,8 @@ if __name__ == '__main__':
     parser.add_argument('--lr_patience', type=int, default=5, help='learning rate patience (default: 5)')
     parser.add_argument('--log_interval', type=int, default=20, help='how many batches to wait before logging training status')
     parser.add_argument('--name', default='exp', help='model save at {SM_MODEL_DIR}/{name}')
-    parser.add_argument('--SSL', type='str', default='None', help='Use SSL (default:None)')
+    parser.add_argument('--early_stopping_thresh', type=int, default=99, help='early stopping thresh (default: 99)')
+    parser.add_argument('--SSL', type=str, default='None', help='Use SSL (default:None)')
 
     # Container environment
     parser.add_argument('--data_dir', type=str, default=os.environ.get('SM_CHANNEL_TRAIN', '/opt/ml/input/data/train/images'))

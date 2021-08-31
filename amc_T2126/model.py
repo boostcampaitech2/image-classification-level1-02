@@ -81,14 +81,65 @@ class NoisyStudentModel(nn.Module):
         if continue_train_model.split('/')[-1] != 'None':
 
             # ================ unfreezing layers close to the output ==============
-            for param in self.model.blocks[6].parameters():
-                param.requires_grad = True
+            # for param in self.model.blocks[6].parameters():
+            #     param.requires_grad = True
 
-            for param in self.model.blocks[5].parameters():
-                param.requires_grad = True
+            # for param in self.model.blocks[5].parameters():
+            #     param.requires_grad = True
             
-            for param in self.model.conv_head.parameters():
-                param.requires_grad=True
+            # for param in self.model.conv_head.parameters():
+            #     param.requires_grad=True
+            # ================= unfreezing ends ====================================
+
+            
+            state_dict = torch.load(continue_train_model)
+            new_state_dict = OrderedDict()
+
+            for k, v in state_dict.items():
+                name = k.replace('model.', '')
+                new_state_dict[name] = v
+
+            self.model.load_state_dict(new_state_dict)
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
+
+
+class EfficientNetPruned(nn.Module):
+    def __init__(self, num_classes, continue_train_model):
+        super().__init__()
+        self.name = 'EfficientNetPruned:efficientnet_b3_pruned'
+        self.model = timm.create_model('efficientnet_b3_pruned', pretrained=True)
+        
+        # Freezing layers
+        for param in self.model.parameters():
+            param.requires_grad = False
+        
+        # new classifier
+        classifier = nn.Sequential(
+            nn.Linear(1536, 512),
+            nn.GELU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(512, 256),
+            nn.GELU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(256, 18)
+        )
+
+        self.model.classifier = classifier
+
+        if continue_train_model.split('/')[-1] != 'None':
+
+            # ================ unfreezing layers close to the output ==============
+            # for param in self.model.blocks[6].parameters():
+            #     param.requires_grad = True
+
+            # for param in self.model.blocks[5].parameters():
+            #     param.requires_grad = True
+            
+            # for param in self.model.conv_head.parameters():
+            #     param.requires_grad=True
             # ================= unfreezing ends ====================================
 
             
