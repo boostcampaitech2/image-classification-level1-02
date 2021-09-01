@@ -7,6 +7,7 @@
 import os
 import re
 import random
+import PIL
 from datetime import datetime
 datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 
@@ -26,9 +27,8 @@ from module.GlobalSeed import seed_everything
 from module.DataLoader import MaskDataset
 from module.Losses import CostumLoss
 from module.F1_score import F1_Loss # ToDo
+from module.get_confusion_matrix import GetConfusionMatrix
 from model.ResNet import ResNet20
-
-
 
 # In[4]:
 
@@ -52,8 +52,8 @@ hp = {
     "LOSS_2"        : "F1",
     "Loos_2_portion": 0.4,
     "TOTAL_EPOCH"   : 5,
-    "IMAGE_SIZE_H"  : 256,
-    "IMAGE_SIZE_W"  : 256,
+    "IMAGE_SIZE_H"  : 128,
+    "IMAGE_SIZE_W"  : 128,
     "SUB_MEAN"      : False,
     "EXP_NUM"       : "pretrained_noCrop_SGD%s"%datetime.now().strftime("%Y-%m-%d_%H_%M_%S"),
     "DEBUG"         : False,
@@ -91,7 +91,7 @@ dataset = MaskDataset(
 )
 
 # split dataset
-split = False
+split = True
 if split:
     train_len = int(len(dataset) * 0.8)
     size = [train_len, len(dataset) - train_len]
@@ -261,10 +261,20 @@ for ep in range(hp["TOTAL_EPOCH"] + 1):
     tr_mean_loss = tr_mean_loss / len(train_dataloader)
     tr_mean_f1 = tr_mean_f1 / len(train_dataloader)
     tr_acc = func_eval(resnet20,train_dataloader,DEVICE)
-
-        
+    
     if split:
         #= Validation phase =============
+        
+        label_cm = GetConfusionMatrix(
+            save_path        = 'confusion_matrix_image',
+            current_epoch    = ep,
+            n_classes        = len(dataset.classes),
+            only_wrong_label = False,
+            savefig          = "tensorboard",
+            tag              = 'exp_%s'%hp["EXP_NUM"],
+            image_name       = 'confusion_matrix',
+        )
+        
         val_mean_loss, val_mean_f1 = 0, 0
         with torch.no_grad():
             for X, y in iter(val_dataloader):
@@ -273,6 +283,7 @@ for ep in range(hp["TOTAL_EPOCH"] + 1):
                 loss_val = loss_combination(predict, y.to(DEVICE))
                 val_mean_loss += loss_val
                 val_mean_f1 += f1(predict, y.to(DEVICE))
+                label_cm.collect_batch_preds(y.to(DEVICE), torch.max(predict,dim=1)[1])
 
         val_mean_loss = val_mean_loss / len(val_dataloader)
         val_acc = func_eval(resnet20,val_dataloader,DEVICE)
@@ -283,11 +294,17 @@ for ep in range(hp["TOTAL_EPOCH"] + 1):
     tr_writer.add_scalar('score/acc', tr_acc, ep)
     tr_writer.add_scalar('loss/F1',tr_mean_f1, ep)
     if split:
+        
+        label_cm.epoch_plot()
+        image = PIL.Image.open(label_cm.plot_buf)
+        image = transforms.ToTensor()(image).unsqueeze(0)
+        
         #= Validation writer =========
         val_writer.add_scalar('loss/CE', val_mean_loss, ep)
         val_writer.add_scalar('score/acc', val_acc, ep)
         val_writer.add_scalar('loss/F1', val_mean_f1, ep)
-
+        val_writer.add_images('CM/comfusion_matrix', image, global_step=ep)
+        
         #= histogram =================
         if hist_log :
             for param_name, param in resnet20.named_parameters():
