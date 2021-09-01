@@ -6,6 +6,8 @@
 
 import os
 import re
+import random
+import PIL
 from datetime import datetime
 datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 
@@ -15,18 +17,18 @@ datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 
-
 # In[3]:
 
-
 from module.GlobalSeed import seed_everything
-from module.DataLoader import MaskDataset#ImageDatasetPreTransform
+from module.DataLoader import MaskDataset
+from module.Losses import CostumLoss
+from module.F1_score import F1_Loss # ToDo
+from module.get_confusion_matrix import GetConfusionMatrix
 from model.ResNet import ResNet20
-from module.F1_score import F1_Loss
-
 
 # In[4]:
 
@@ -37,108 +39,104 @@ from torch.utils.tensorboard import SummaryWriter
 
 # In[5]:
 
+#pretrained_unfreezed_
 
 # HyperParameter
-SEED          = 777
-DEVICE        = torch.device("cuda:0")
-BATCH_SIZE    = 128
-LEARNING_RATE = 0.00001
-WEIGHT_DECAY  = 0.01
-LOSS_FUNCTION = "F1loss"#"CrossEntropy"
-TOTAL_EPOCH   = 50 #1000000
-IMAGE_SIZE    = 128
-SUB_MEAN      = False #True
-exp_num       = datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
+hp = {
+    "SEED"          : 777,
+    "DEVICE"        : "cuda:0",
+    "BATCH_SIZE"    : 128,
+    "LEARNING_RATE" : 0.001,
+    "WEIGHT_DECAY"  : 0.00001,
+    "LOSS_1"        : "CrossEntropyLoss", 
+    "LOSS_2"        : "F1",
+    "Loos_2_portion": 0.4,
+    "TOTAL_EPOCH"   : 5,
+    "IMAGE_SIZE_H"  : 128,
+    "IMAGE_SIZE_W"  : 128,
+    "SUB_MEAN"      : False,
+    "EXP_NUM"       : "pretrained_noCrop_SGD%s"%datetime.now().strftime("%Y-%m-%d_%H_%M_%S"),
+    "DEBUG"         : False,
 
+}
 
-debug = False
+# set device
+DEVICE = torch.device(hp["DEVICE"])
 
-if debug : BATCH_SIZE = 10
-
-# In[6]:
-
+# set debug mode
+if hp["DEBUG"] : BATCH_SIZE = 10
 
 # set random seed
-seed_everything(SEED)
+seed_everything(hp["SEED"])
 
-
-# In[7]:
-
-
+# set dataset
 dataset = MaskDataset(
-    target         = "gender",
+    target         = "total_label",
     realign        = True,
     csv_path       = '../../input/data/train/train.csv',
     images_path    = '../../input/data/train/images/',
     pre_transforms = transforms.Compose([
-        lambda img : transforms.functional.crop(img, 80, 50, 320, 256),
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        #lambda img : transforms.functional.crop(img, 80, 50, 320, 256),
+        transforms.Resize((hp["IMAGE_SIZE_H"],hp["IMAGE_SIZE_W"])),
     ]),
     transforms = transforms.Compose([
         transforms.RandomHorizontalFlip(p=0.5),
+        # transforms.RandomCrop((hp["IMAGE_SIZE_H"],hp["IMAGE_SIZE_W"]), padding=32),
+        # transforms.RandomRotation(degrees = (-15, 15)),
         transforms.ToTensor(),
-        transforms.Normalize((0, 0, 0), (0.5, 0.5, 0.5)),
+        # transforms.Normalize((0, 0, 0), (1, 1, 1)),
     ]),
-    sub_mean = SUB_MEAN,
-    debug = debug
+    sub_mean = hp["SUB_MEAN"],
+    debug = hp["DEBUG"]
 )
 
-if debug:
-    size = [int(10 * 7 * 0.8),int(10 * 7 * 0.2)]
+# split dataset
+split = True
+if split:
+    train_len = int(len(dataset) * 0.8)
+    size = [train_len, len(dataset) - train_len]
     train_set, val_set = torch.utils.data.random_split(dataset, size)
-
 else :
-    size = [int(4500 * 0.6 * 7 * 0.8),int(4500 * 0.6 * 7 * 0.2)]
-    train_set, val_set = torch.utils.data.random_split(dataset, size)
-
-
-# In[8]:
-
-
+    train_set = dataset
+# set DataLoader
 train_dataloader = DataLoader(
     train_set,
-    batch_size  = BATCH_SIZE,
+    batch_size  = hp["BATCH_SIZE"],
     shuffle     = True,
     sampler     = None,
     num_workers = 8,
     drop_last   = True
 )
+if split:
+    val_dataloader = DataLoader(
+        val_set,
+        batch_size  = hp["BATCH_SIZE"],
+        shuffle     = None,
+        sampler     = None,
+        num_workers = 8,
+        drop_last   = True
+    )
 
-val_dataloader = DataLoader(
-    val_set,
-    batch_size  = BATCH_SIZE,
-    shuffle     = None,
-    sampler     = None,
-    num_workers = 8,
-    drop_last   = True
-)
-
-
-# In[9]:
-
-
+# single batch test
 single_batch_X, single_batch_y = next(iter(train_dataloader))
 print(single_batch_X.shape)
 print(single_batch_y.shape)
 
 
-# In[10]:
+#========================================================================
+#------------------------------------------------------------------------
+#========================================================================
 
 
-resnet20 = ResNet20(single_batch_X.shape, DEVICE)
+DEVICE = hp["DEVICE"]
+'''
+# model define
+resnet20 = ResNet20(single_batch_X.shape, hp["DEVICE"])
 
-
-# In[11]:
-
-
+# print summary
 #summary(resnet20, single_batch_X.shape[1:])
 
-
-# In[12]:
-
-
-# Initialization
-
+# weight and bias Initialization
 def weight_initialization(module):
     module_name = module.__class__.__name__
     if isinstance(module,nn.Conv2d): # init conv
@@ -150,21 +148,53 @@ def weight_initialization(module):
     if isinstance(module,nn.Linear): # lnit dense
         nn.init.kaiming_uniform_(module.weight)
         nn.init.zeros_(module.bias)
-    
-
-# In[13]:
-
 
 resnet20 = resnet20.apply(weight_initialization)
+'''
+import torchvision.models as models
+import math
+resnet20 = resnet18 = models.resnet18(pretrained=True)
+for param in resnet20.parameters():
+    param.requires_grad = False
+resnet20.fc = torch.nn.Linear(
+    in_features= 512, out_features=18, bias=False
+)
+torch.nn.init.xavier_uniform_(resnet20.fc.weight)
+#stdv = 1/math.sqrt(512)
+#resnet20.fc.bias.data.uniform_(-stdv, stdv)
+for param in resnet20.fc.parameters():
+    param.requires_grad = True
+resnet20 = resnet20.to(DEVICE)
 
+# set loss function
+loss_combination = CostumLoss(
+    lossfn      = hp["LOSS_1"],
+    lossfn_2    = hp["LOSS_2"],
+    p           = hp["Loos_2_portion"],
+    num_classes = len(dataset.classes),
+    device      = hp["DEVICE"],
+)
 
-# In[14]:
-
-
-loss = torch.nn.CrossEntropyLoss()
-f1_loss = F1_Loss(num_classes = 18).cuda()
-opt = torch.optim.Adam(resnet20.parameters(), lr = LEARNING_RATE, weight_decay = WEIGHT_DECAY)
-
+f1 = F1_Loss(len(dataset.classes)).to(DEVICE)
+'''
+opt = torch.optim.Adam(
+    resnet20.parameters(),
+    lr = hp["LEARNING_RATE"],
+    weight_decay = hp["WEIGHT_DECAY"]
+)
+'''
+opt = torch.optim.SGD(
+    resnet20.parameters(),
+    lr = hp["LEARNING_RATE"],
+    momentum = 0.99,
+    weight_decay = hp["WEIGHT_DECAY"]
+)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(
+    opt,
+    gamma = 0.1,
+    last_epoch=-1,
+    verbose=True
+)
 
 # In[15]:
 
@@ -180,140 +210,140 @@ def func_eval(model,data_iter,device):
             n_correct += (y_pred==y_trgt).sum().item()
             n_total += batch_in.size(0)
         val_accr = (n_correct/n_total)
-        #model.train() # back to train mode 
+        model.train() # back to train mode 
     return val_accr
 print ("Done")
 
 
 # In[ ]:
 
-tr_writer = SummaryWriter('logs/exp_%s/tr'%exp_num)
-val_writer = SummaryWriter('logs/exp_%s/val'%exp_num)
-hist_writer = SummaryWriter('logs/exp_%s/hist'%exp_num)
-hp_writer = SummaryWriter('logs/exp_%s/'%exp_num)
+print(hp["EXP_NUM"])
 
+tr_writer = SummaryWriter('logs/hp_tunning/exp_%s/tr'%hp["EXP_NUM"])
+if split:
+    val_writer = SummaryWriter('logs/hp_tunning/exp_%s/val'%hp["EXP_NUM"])
+    hist_writer = SummaryWriter('logs/hp_tunning/exp_%s/hist'%hp["EXP_NUM"])
+    hp_writer = SummaryWriter('logs/hp_tunning/')
+
+hist_log = False
 global_step = 0
-
-for ep in range(TOTAL_EPOCH + 1):
+for ep in range(hp["TOTAL_EPOCH"] + 1):
+    
     #= Training phase =========
     tr_mean_loss, tr_mean_f1 = 0, 0
-    
     for X, y in iter(train_dataloader):
         global_step += 1
         
+        #= Zero epoch recording ==================
         if not ep:
             with torch.no_grad():
                 resnet20.eval()
                 predict = resnet20(X.to(DEVICE))
-                loss_val = loss(predict, y.to(DEVICE))
+                loss_val = loss_combination(predict, y.to(DEVICE))
                 tr_mean_loss += loss_val
-                f1_val = f1_loss(predict, y.to(DEVICE))
-                tr_mean_f1 += f1_val
+                tr_mean_f1 += f1(predict, y.to(DEVICE))
+            
+        #= train epoch recording ==================
         else:
             resnet20.train()
             predict = resnet20(X.to(DEVICE))
-            loss_val = loss(predict, y.to(DEVICE))
+            loss_val = loss_combination(predict, y.to(DEVICE))
             tr_mean_loss += loss_val
-            f1_val = f1_loss(predict, y.to(DEVICE))
-            tr_mean_f1 += f1_val
-
-            if LOSS_FUNCTION == "CrossEntropy":
-                loss_val = loss_val
-            elif LOSS_FUNCTION == "F1loss":
-                loss_val = f1_val
+            tr_mean_f1 += f1(predict, y.to(DEVICE))
+            
+            # update
             opt.zero_grad()
             loss_val.backward()
             opt.step()
-        
-    #= Validation phase =============
-    val_mean_loss, val_mean_f1 = 0, 0
-    with torch.no_grad():
-        for X, y in iter(val_dataloader):
-            resnet20.eval()
-            predict = resnet20(X.to(DEVICE))
-            loss_val = loss(predict, y.to(DEVICE))
-            val_mean_loss += loss_val
-            val_mean_f1 += f1_loss(predict, y.to(DEVICE))
-        
-    #= Training writer =========
-    tr_writer.add_scalar(
-        'loss/CE',
-        tr_mean_loss / len(train_dataloader),
-        ep
-    )
+    
+    if ep in [100,140]:
+        scheduler.step()
+    tr_mean_loss = tr_mean_loss / len(train_dataloader)
+    tr_mean_f1 = tr_mean_f1 / len(train_dataloader)
     tr_acc = func_eval(resnet20,train_dataloader,DEVICE)
-    tr_writer.add_scalar(
-        'score/acc',
-        tr_acc,
-        ep
-    )
-    tr_writer.add_scalar(
-        'loss/F1',
-        tr_mean_f1 / len(train_dataloader),
-        ep
-    )
     
-    #= Validation writer =========
-    val_writer.add_scalar(
-        'loss/CE',
-        val_mean_loss / len(val_dataloader),
-        ep
-    )
-    val_acc = func_eval(resnet20,val_dataloader,DEVICE)
-    val_writer.add_scalar(
-        'score/acc',
-        val_acc,
-        ep
-    )
-    val_writer.add_scalar(
-        'loss/F1',
-        val_mean_f1 / len(val_dataloader),
-        ep
-    )
-    
+    if split:
+        #= Validation phase =============
         
+        label_cm = GetConfusionMatrix(
+            save_path        = 'confusion_matrix_image',
+            current_epoch    = ep,
+            n_classes        = len(dataset.classes),
+            only_wrong_label = False,
+            savefig          = "tensorboard",
+            tag              = 'exp_%s'%hp["EXP_NUM"],
+            image_name       = 'confusion_matrix',
+        )
+        
+        val_mean_loss, val_mean_f1 = 0, 0
+        with torch.no_grad():
+            for X, y in iter(val_dataloader):
+                resnet20.eval()
+                predict = resnet20(X.to(DEVICE))
+                loss_val = loss_combination(predict, y.to(DEVICE))
+                val_mean_loss += loss_val
+                val_mean_f1 += f1(predict, y.to(DEVICE))
+                label_cm.collect_batch_preds(y.to(DEVICE), torch.max(predict,dim=1)[1])
+
+        val_mean_loss = val_mean_loss / len(val_dataloader)
+        val_acc = func_eval(resnet20,val_dataloader,DEVICE)
+        val_mean_f1 = val_mean_f1 / len(val_dataloader)
+    
+    #= Training writer =========
+    tr_writer.add_scalar('loss/CE', tr_mean_loss, ep)
+    tr_writer.add_scalar('score/acc', tr_acc, ep)
+    tr_writer.add_scalar('loss/F1',tr_mean_f1, ep)
+    if split:
+        
+        label_cm.epoch_plot()
+        image = PIL.Image.open(label_cm.plot_buf)
+        image = transforms.ToTensor()(image).unsqueeze(0)
+        
+        #= Validation writer =========
+        val_writer.add_scalar('loss/CE', val_mean_loss, ep)
+        val_writer.add_scalar('score/acc', val_acc, ep)
+        val_writer.add_scalar('loss/F1', val_mean_f1, ep)
+        val_writer.add_images('CM/comfusion_matrix', image, global_step=ep)
+        
+        #= histogram =================
+        if hist_log :
+            for param_name, param in resnet20.named_parameters():
+                if param.requires_grad:
+                    if re.search("weight", param_name):
+                        tag = 'weight/'
+                    elif re.search("bias", param_name):
+                        tag = 'bias/'
+                    hist_writer.add_histogram(
+                        tag = tag + param_name,
+                        values = param,
+                        global_step=ep,
+                    )
+    
+    
+    
     print("ep : ", ep, end = '\r')
-    
-    for param_name, param in resnet20.named_parameters():
-        if param.requires_grad:
-            if re.search("weight", param_name):
-                tag = 'weight/'
-            elif re.search("bias", param_name):
-                tag = 'bias/'
-            hist_writer.add_histogram(
-                tag = tag + param_name,
-                values = param,
-                global_step=ep,
-            )
-    saved_model_path = './saved_model/model_%s/model/'%exp_num
-    os.makedirs(saved_model_path, exist_ok = True)
-    torch.save(resnet20, saved_model_path+'ep_%d.pt'%ep)
-    
-    saved_weights_path = './saved_model/model_%s/weights/'%exp_num
-    os.makedirs(saved_weights_path, exist_ok = True)
-    torch.save(resnet20.state_dict(), saved_weights_path+'/ep_%d.pt'%ep)
-
-hp_writer.add_hparams(
-    {
-        "learning_rate": LEARNING_RATE,
-        "batch_size"   : BATCH_SIZE,
-        "weight_decay" : WEIGHT_DECAY,
-        "image_size"   : IMAGE_SIZE,
-        "sub_mean"     : SUB_MEAN
-    },
-    {
-        "hp/tr/loss/CE"      : tr_mean_loss / len(train_dataloader),
-        "hp/tr/loss/F1"      : tr_mean_f1 / len(train_dataloader),
-        "hp/tr/score/acc"    : tr_acc,
-        "hp/val/loss/CE"     : val_mean_loss / len(val_dataloader),
-        "hp/val/loss/F1"     : val_mean_f1 / len(val_dataloader),
-        "hp/val/score/acc"   : val_acc,
-    }
-)
 
 
+saved_model_path = './saved_model/model_%s/model/'%hp["EXP_NUM"]
+os.makedirs(saved_model_path, exist_ok = True)
+torch.save(resnet20, saved_model_path+'ep_%d.pt'%ep)
 
-# In[18]:
+saved_weights_path = './saved_model/model_%s/weights/'%hp["EXP_NUM"]
+os.makedirs(saved_weights_path, exist_ok = True)
+torch.save(resnet20.state_dict(), saved_weights_path+'/ep_%d.pt'%ep)
 
+if split:
+    hp_writer.add_hparams(
+        hp,
+        {
+            "tr/loss/CE"      : tr_mean_loss,
+            "tr/loss/F1"      : tr_mean_f1,
+            "tr/score/acc"    : tr_acc,
+            "val/loss/CE"     : val_mean_loss,
+            "val/loss/F1"     : val_mean_f1,
+            "val/score/acc"   : val_acc,
+        },
+        run_name = f'exp_{hp["EXP_NUM"]}'
+    )
 
     
