@@ -5,7 +5,7 @@ from tqdm import tqdm
 from sklearn.metrics import f1_score
 
 class ModifiedModel(nn.Module):
-    def __init__(self, num_classes=18):
+    def __init__(self, num_classes=3):
         super().__init__()
         ### 모델 Layer 정의 ###
         self.pretrained = torchvision.models.resnet18(pretrained=True)  # resnet 18 pretrained model 사용
