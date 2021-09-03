@@ -20,15 +20,14 @@ class Resnet18Model(nn.Module):
         return self.model(x)
     
     # Model train
-    def fit(self, train_loader, val_loader, device, epochs=20, save=True, saved_folder="saved", \
+    def fit(self, train_loader, val_loader, device, learning_rate=1e-5, epochs=20, save=True, saved_folder="saved", \
               train_writer=None, val_writer=None):
         '''
         writer : tensorboard writer
         '''
-
-        LEARNING_RATE = 1e-5
+        
         criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=LEARNING_RATE)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         best_val_loss = 1e9
         best_val_f1 = 0

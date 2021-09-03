@@ -58,7 +58,7 @@ if __name__ == '__main__':
         train_loader=trainloader, 
         val_loader=valloader,
         device=DEVICE, 
-        epochs=15, 
+        epochs=20, 
         save=False, 
         saved_folder="saved",
         train_writer=None,
