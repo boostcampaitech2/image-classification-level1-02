@@ -13,7 +13,7 @@
 
 ## Archive contents
 
-```3rd_solution/
+```
 image-classification-level1-02/
 ├── input/
 │   └── data/
@@ -32,6 +32,7 @@ image-classification-level1-02/
 
 - ```input/data/train``` : train dataset images
 - ```input/data/test``` : used in evaluation
+- ```input/``` : download from [https://stages.ai/](https://stages.ai/)
 
 ### Requirements
 
@@ -59,7 +60,7 @@ python main.py
 - Pretrained ResNet18 model
 - No data augmentation
 - Hyperparameter
-    - Learning rate : 0.0005
+    - Learning rate : 1e-5
     - Optimizer : Adam
     - Batch size : 128
 
