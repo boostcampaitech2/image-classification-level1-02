@@ -16,6 +16,13 @@ python train.py --epoch 100 --dataset MaskSplitByProfileDataset --augmentation S
 
 python train.py --epoch 100 --dataset MaskSplitByProfileDataset --augmentation WeakAugmentation --batch_size 128 --valid_batch_size 128 --model EfficientNetPruned --optimizer Adam --lr 0.0001 --criterion focal --lr_patience 5 --early_stopping_thresh 12 --name ssl_weakAug --SSL t
 
+# fine tuning all layers #
+python train.py --epoch 300 --dataset MaskSplitByProfileDataset --augmentation WeakAugmentation --batch_size 128 --valid_batch_size 128 --model EfficientNetPruned --continue_train_model model/ssl_weakAug8/EfficientNetPruned:efficientnet_b3_pruned-16-best.pt --optimizer Adam --lr 0.0000001 --criterion focal --lr_patience 10 --early_stopping_thresh 35 --name ssl_weakAug_fine --SSL t
+
 ##################  INFERENCE  ########################
 
-python inference.py --batch_size 128 --model NoisyS tudentModel --trained_model_name model/saved_models/tf_efficientnet_l2_fine_tuned.pt
+python inference.py --batch_size 128 --model NoisyStudentModel --trained_model_name model/saved_models/tf_efficientnet_l2_fine_tuned.pt
+
+python inference.py --batch_size 128 --model EfficientNetPruned --trained_model_name model/ssl_weakAug9/EfficientNetPruned:efficientnet_b3_pruned-44-best.pt
+
+python inference.py --batch_size 128 --model EfficientNetPruned --trained_model_name model/ssl_weakAug_fine6/EfficientNetPruned:efficientnet_b3_pruned-125-best.pt

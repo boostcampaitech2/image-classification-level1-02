@@ -124,13 +124,17 @@ class EfficientNetPruned(nn.Module):
             nn.Linear(512, 256),
             nn.GELU(),
             nn.Dropout(p=0.5),
-            nn.Linear(256, 18)
+            nn.Linear(256, 18),
+            nn.Softmax() # cross entropy 일때는 뺀다
         )
 
         self.model.classifier = classifier
 
         if continue_train_model.split('/')[-1] != 'None':
-
+            
+            for param in self.model.parameters():
+                param.requires_grad = True
+            
             # ================ unfreezing layers close to the output ==============
             # for param in self.model.blocks[6].parameters():
             #     param.requires_grad = True
