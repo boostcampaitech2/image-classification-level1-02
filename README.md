@@ -1,6 +1,6 @@
 # Level1 P-stage Image classification
 
-#### 💡 **Team: boos2**
+### 💡 **Team: boos2**
 
 ## Project Overview
 
@@ -54,7 +54,7 @@ Install packages :  `pip install -r requirements.txt`
 python main.py
 ```
 
-#### Trained Model
+### Trained Model
 
 - Pretrained ResNet18 model
 - No data augmentation
