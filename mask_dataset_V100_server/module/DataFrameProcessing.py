@@ -12,13 +12,14 @@ def get_total_label_data_frame(df,im_path):
         labels = ["[0,30)","[30,60)" , "[60,inf)"]
     )
     new_df = {
+        "ID"        : [],
         "Gender"    : [],
         "AgeBand"   : [],
         "MaskState" : [],
         "FileName"  : [],
         "Label"     : []
     }
-    for G, A, p in df[["gender", "AgeBand", "path"]].to_numpy():
+    for _id, G, A, p in df[["id","gender", "AgeBand", "path"]].to_numpy():
         path = im_path + p + "/"
         for im_name in os.listdir(path):
             if im_name.startswith("."):
@@ -29,7 +30,8 @@ def get_total_label_data_frame(df,im_path):
                 M = "normal" # normal
             elif im_name.startswith("incorrect"):
                 M = "incorrect" # incorrect_mask
-
+            
+            new_df["ID"].append(_id)
             new_df["Gender"].append(G)
             new_df["AgeBand"].append(A)
             new_df["MaskState"].append(M)

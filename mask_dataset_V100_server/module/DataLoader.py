@@ -21,6 +21,7 @@ class MaskDataset(Dataset):
         images_path : str = "./train/images/",
         pre_transforms : transforms.Compose = None,
         transforms : transforms.Compose = None,
+        load_im = False,
         sub_mean = False,
         debug : bool = False
     ):
@@ -37,10 +38,10 @@ class MaskDataset(Dataset):
             df = df.sample(10)
         
         if target == "total_label":
-            df = get_total_label_data_frame(df, images_path) 
+            self.df = get_total_label_data_frame(df, images_path) 
             
             # data imbalance technique
-            df = total_label_balance(df)
+            self.df = total_label_balance(self.df)
             
             self.classes = [
                 "female_[0,30)_mask"       , "male_[0,30)_mask",        # 0, 1
@@ -56,15 +57,22 @@ class MaskDataset(Dataset):
                 "female_[60,inf)_incorrect", "male_[60,inf)_incorrect", # 16, 17
             ]
             
-            self.X_y = self.total_label(df)
-        
+            self.label_fn = self.total_label
+            if load_im:
+                self.X_y = self.total_label(self.df)
+                if realign:
+                    shuffle(self.X_y)
         
         elif target == "gender":
             #= Gender to number ====================================
             df["GenderNum"] = df["gender"].map({"female" : 0, "male" : 1})
             self.classes = ["female", "male"]
             
-            self.X_y = self.gender_label(df)
+            self.label_fn = self.gender_label
+            if load_im:
+                self.X_y = self.gender_label(df)
+                if realign:
+                    shuffle(self.X_y)
             #=======================================================
         elif target == "age":
             #= AgeBand to number ===================================
@@ -86,8 +94,7 @@ class MaskDataset(Dataset):
         
         #=======================================================
         
-        if realign:
-            shuffle(self.X_y)
+        
         
     def total_label(self, df):
         print("mask dataset is loading ::::")
@@ -157,3 +164,22 @@ only_normal_dataset = MaskDataset(
 )
 
 '''
+from copy import deepcopy
+
+def DatasetSplit(dataset, validation_rate = 0.2):
+
+    val_set_df = dataset.df.sample(frac = validation_rate)
+    train_set_df = dataset.df.drop(val_set_df.index)
+
+    trainset = dataset
+    valset = deepcopy(dataset)
+
+    # TODO 최적화 필요, 이미지 불러오기 중복
+
+    trainset.df = train_set_df
+    trainset.X_y = trainset.label_fn(trainset.df)
+
+    valset.df = val_set_df
+    valset.X_y = valset.label_fn(valset.df)
+
+    return trainset, valset

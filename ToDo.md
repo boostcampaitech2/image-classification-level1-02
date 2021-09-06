@@ -22,16 +22,17 @@
           - [x] CutMix 적용
             - CrossEntropyLoss가 지속적으로 떨어지는 경향을 보이지만 전체적인 성능향상은 없었다. 그리고 Adam을 사용한 경우 overfitting이 생기기도 했다. 만약 beta나 lam 등의 값ㅇ르 조절하면 좋아질 가능성이 있다.
           - [ ] LabelSmoothing
-        - [ ] validation dataset이 한쪽으로 편향되어있을 가능성이 크다.
-          - 이거 꼭 점검 할 것 
-        - [ ] 제출 모델 용 SGD 훈련
+        - [x] validation dataset이 한쪽으로 편향되어있을 가능성이 크다.
+          - 이거 꼭 점검 할 것
+          - [x]split해주는 wrapper를 만들어서 모든 라벨, 사람 별로 겹쳐지지 않게 데이터를 나눌것
+        - [x] 제출 모델 용 SGD 훈련
           - FromScratch : F1score가 0.5 정도로 찍기 수준이다. acc도 60% 수준
           - pretrained  : F1score 0.8 / acc 80% 정도로 훈련됨
             모델 이름<exp_pretrained_SGD2021-08-30_21_26_10>
     - [ ] 성별 라벨을 예측하는 모델을 hparams tunning으로 훈련해 보기
     - [ ] 나이 라벨을 예측하는 모델을 hparams tunning으로 훈련해 보기
     - [ ] 마스크 라벨을 예측하는 모델을 hparams tunning으로 훈련해 보기
-
+  - CAAE를 통해서 마스크, 성별, 나이 를 conditioning 할 수 있는가?
 
 ## DataLoader 설계
   - pre-transform과 tranform을 나눠서 동작시키면 feed에서 더 빠르게 연산이 가능하다.

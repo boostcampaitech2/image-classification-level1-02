@@ -21,24 +21,30 @@ class CostumLoss:
         self.device = device
         self.comb = False
         self.num_classes = num_classes
+        self.lossfn_2 = lossfn_2
         self.main_loss = self.get_loss(lossfn)
         
-        if lossfn_2 and p:
+        if self.lossfn_2:
             self.sub_loss = self.get_loss(lossfn_2)
+        if p:
             self.p = torch.tensor(p).to(device)
             self.comb = True
-        elif not lossfn_2 and not p :
-            pass
-        else:
-            raise ValueError(
-                "Second loss function and its portion is must be setted simultaneously."
-            )
+#         elif not lossfn_2 and not p :
+#             pass
+#         else:
+#             raise ValueError(
+#                 "Second loss function and its portion is must be setted simultaneously."
+#             )
 
     def __call__(self, prediction, target):
         loss_val = self.main_loss(prediction, target)
+        self.loss_1_val = loss_val
+        if self.lossfn_2:
+            self.loss_2_val = self.sub_loss(prediction, target)
+            
         if self.comb :
             loss_val = (1 - self.p) * loss_val + \
-                            self.p * self.sub_loss(prediction, target)
+                            self.p * self.loss_2_val
         return loss_val
     
     def get_loss(self, loss_fn_name):
