@@ -27,6 +27,7 @@ class MaskDataset(Dataset):
     ):
         
         self.target = target
+        self.realign = realign
         self.images_path = images_path
         self.pre_transforms = pre_transforms
         self.transforms = transforms
@@ -93,8 +94,16 @@ class MaskDataset(Dataset):
             raise ValueError(template%srt(target))
         
         #=======================================================
-        
-        
+    
+    def get_images(self):
+        if self.target == "total_label":
+            self.X_y = self.total_label(self.df)
+            if self.realign:
+                shuffle(self.X_y)
+        elif self.target == "gender":
+            self.X_y = self.gender_label(df)
+            if self.realign:
+                shuffle(self.X_y)
         
     def total_label(self, df):
         print("mask dataset is loading ::::")

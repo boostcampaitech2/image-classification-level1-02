@@ -1,375 +1,244 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
-import os
-import re
 import random
-import PIL
-import math
 import argparse
+import time
 from datetime import datetime
-datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-
-
-# In[2]:
-
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
-
-# In[3]:
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
 from module.GlobalSeed import seed_everything
 from module.DataLoader import MaskDataset, DatasetSplit
 from module.Losses import CostumLoss
 from module.Optim import Optim
-from module.F1_score import F1_Loss # ToDo
-from module.get_confusion_matrix import GetConfusionMatrix
-from model.ResNet import ResNet20
+from module.Trainer import train_loop
 from model.ModelLoader import ModelLoader
-
-# In[4]:
-
 
 from torchsummary import summary
 from torch.utils.tensorboard import SummaryWriter
 
 
-# In[5]:
-
-#pretrained_unfreezed_
+print("datetime.now ::: ", datetime.now().strftime("%Y-%m-%d_%H_%M_%S"))
 
 # HyperParameter
-parser = argparse.ArgumentParser(description = "Hyperparametr")
-parser.add_argument(
-    "--SEED",
-    type = int,
-    help = "SEED"
-)
-parser.add_argument(
-    "--BATCH_SIZE",
-    type = int,
-    help = "BATCH_SIZE"
-)
-parser.add_argument(
-    "--LEARNING_RATE",
-    type = float,
-    help = "LEARNING_RATE"
-)
-parser.add_argument(
-    "--WEIGHT_DECAY",
-    type = float,
-    help = "WEIGHT_DECAY"
-)
-parser.add_argument(
-    "--Loos_2_portion",
-    type = float,
-    help = "Loos_2_portion"
-)
-parser.add_argument(
-    "--OPTIMIZER",
-    type = str,
-    help = "Loos_2_portion"
-)
-parser.add_argument(
-    "--release_range",
-    type = int,
-    help = "release_range"
-)
-parser.add_argument(
-    "--TOTAL_EPOCH",
-    type = int,
-    help = "release_range",
-    default = 10
-)
+parser = argparse.ArgumentParser(description="Set Hyperparametr")
+parser.add_argument("--RANDOM_SEARCH", type=bool, default=False,
+                    help="When you want to run this code with a random hyperparameter," +
+                         " this argument should be True. [DEFAULT:bool = False].")
+parser.add_argument("--DEVICE", type=str, default="cuda:0",
+                    help="Set your device [DEFAULT:str = 'cuda:0'].")
+parser.add_argument("--SEED", type=int, default=1,
+                    help="Set your random seed [DEFAULT:int = 1]." +
+                         " This is an argument for module.GlobalSeed.seed_everything().")
+parser.add_argument("--BATCH_SIZE", type=int, default=128,
+                    help="Set your batch size [DEFAULT:int = 128].")
+parser.add_argument("--LEARNING_RATE", type=float, default=0.001,
+                    help="Set your learning rate [DEFAULT:float = 0.001].")
+parser.add_argument("--WEIGHT_DECAY", type=float, default=0.00001,
+                    help="Set your weight decay factor [DEFAULT:float = 0.00001].")
+parser.add_argument("--LOSS_1", type=str, default="CrossEntropyLoss",
+                    help="Set your first loss function [DEFAULT:str = 'CrossEntropyLoss'].")
+parser.add_argument("--LOSS_2", type=str, default="F1",
+                    help="Set your second loss function [DEFAULT:str = 'F1'].")
+parser.add_argument("--LOSS_2_PORTION", type=float, default=0.4,
+                    help="Set your portion of the second loss function [DEFAULT:float = 0.4]." +
+                         " It must be in the range [0,1].")
+parser.add_argument("--OPTIMIZER", type=str, default="Adam",
+                    help="Set your optimizer [DEFAULT:str = 'Adam'].")
+parser.add_argument("--SCHEDULER", type=bool, default=False,
+                    help="Set whether to use lr-scheduler or not [DEFAULT:bool = False].")
+parser.add_argument("--release_range", type=int, default=0,
+                    help="Set your release range for pre-trained model [DEFAULT:int = 0]." +
+                         " If it is zero, the all params is released.")
+parser.add_argument("--TOTAL_EPOCH", type=int, default=5,
+                    help="Set your total epoch of training loop [DEFAULT:int = 10].")
+parser.add_argument("--IMAGE_SIZE_H", type=int, default=128,
+                    help="Set your height of image size [DEFAULT:int = 128].")
+parser.add_argument("--IMAGE_SIZE_W", type=int, default=128,
+                    help="Set your width of image size [DEFAULT:int = 128].")
+parser.add_argument("--SUB_MEAN", type=bool, default=False,
+                    help="Set whether to use mean-subtraction or not [DEFAULT:bool = False].")
+parser.add_argument("--SPLIT", type=bool, default=False,
+                    help="Set whether to use a splited dataset into train and validation [DEFAULT:bool = False].")
+parser.add_argument("--EXP_NUM", type=str, default="CropedData%s" % datetime.now().strftime("%Y-%m-%d_%H_%M_%S"),
+                    help="Set the number of this ecperiment. [DEFAULT:str = datetime.now()].")
+parser.add_argument("--DEBUG", type=bool, default=False,
+                    help="Set whether to use debug mode or not [DEFAULT:bool = False].")
+parser.add_argument("--HIST_LOG", type=bool, default=False,
+                    help="Set whether to use histogram writer or not [DEFAULT:bool = False].")
+parser.add_argument("--SAVE_MODEL", type=bool, default=False,
+                    help="Set whether to save whole model or not [DEFAULT:bool = False].")
+parser.add_argument("--SAVE_WEIGHT", type=bool, default=False,
+                    help="Set whether to save weight of model or not [DEFAULT:bool = False].")
 
-arg = parser.parse_args()
+hp = parser.parse_args()
 
-hp = {
-    "SEED"          : arg.SEED,
-    "DEVICE"        : "cuda:0",
-    "BATCH_SIZE"    : arg.BATCH_SIZE,
-    "LEARNING_RATE" : arg.LEARNING_RATE,
-    "WEIGHT_DECAY"  : arg.WEIGHT_DECAY,
-    "LOSS_1"        : "CrossEntropyLoss", 
-    "LOSS_2"        : "F1",
-    "Loos_2_portion": arg.Loos_2_portion,
-    "OPTIMIZER"     : arg.OPTIMIZER,
-    "release_range" : arg.release_range,
-    "TOTAL_EPOCH"   : arg.TOTAL_EPOCH,
-    "IMAGE_SIZE_H"  : 128,
-    "IMAGE_SIZE_W"  : 128,
-    "SUB_MEAN"      : False,
-    "EXP_NUM"       : "CropedData%s"%datetime.now().strftime("%Y-%m-%d_%H_%M_%S"),
-    "DEBUG"         : False,
+if not torch.cuda.is_available() and hp.DEVICE == "cuda:0":
+    raise ValueError("!!! CUDA IS NOT SUPPORTED. SET YOUR DEVICE AS CPU. !!!")
+else:
+    DEVICE = torch.device('cuda:0')
 
-}
+if hp.RANDOM_SEARCH:
+    _R = random.Random(time.time())
+    hp.BATCH_SIZE = _R.randint(1, 256)
+    hp.LEARNING_RATE = _R.uniform(0.01, 1)
+    hp.LEARNING_RATE *= (10 ** (-1 * _R.randint(0, 4)))
+    hp.WEIGHT_DECAY = _R.uniform(0.001, 0.1)
+    hp.WEIGHT_DECAY *= (10 ** (-1 * _R.randint(0, 3)))
+    hp.LOSS_2_PORTION = _R.uniform(0, 1)
+    hp.OPTIMIZER = "Adam" if _R.randint(0, 1) else "SGD"
+    hp.release_range = _R.randint(0, 20)
+    hp.SUB_MEAN = True if _R.randint(0, 1) else False
+
 
 def main():
-    # set device
-    DEVICE = torch.device(hp["DEVICE"])
+    # set random seed =======================================
+    seed_everything(hp.SEED)
 
-    # set debug mode
-    if hp["DEBUG"] : BATCH_SIZE = 10
+    # set debug mode ========================================
+    if hp.DEBUG:
+        print("!!! RUNNING ON DEBUG MODE !!!")
+        hp.BATCH_SIZE = 10
+        hp.TOTAL_EPOCH = 5
+        hp.HIST_LOG = False
 
-    # set random seed
-    seed_everything(hp["SEED"])
-
-    # set dataset
-    pre_transforms = transforms.Compose([
-        #lambda img : transforms.functional.crop(img, 80, 50, 320, 256),
-        transforms.Resize((hp["IMAGE_SIZE_H"],hp["IMAGE_SIZE_W"])),
+    # set dataset ===========================================
+    _pre_transforms = transforms.Compose([
+        transforms.Resize((hp.IMAGE_SIZE_H, hp.IMAGE_SIZE_W)),
     ])
+
     _transforms = transforms.Compose([
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ToTensor(),
     ])
-        
+
     dataset = MaskDataset(
-        target         = "total_label",
-        realign        = True,
-        csv_path       = '../../input/croped_data/train/train.csv',
-        images_path    = '../../input/croped_data/train/cropped_images/',
-        pre_transforms = pre_transforms,
-        transforms     = _transforms,
-        load_im        = False,
-        sub_mean       = hp["SUB_MEAN"],
-        debug          = hp["DEBUG"]
+        target="total_label",
+        realign=True,
+        csv_path='../../input/croped_data/train/train.csv',
+        images_path='../../input/croped_data/train/cropped_images/',
+        pre_transforms=_pre_transforms,
+        transforms=_transforms,
+        load_im=False,
+        sub_mean=hp.SUB_MEAN,
+        debug=hp.DEBUG
     )
 
-    # split dataset
-    split = True
-    if split:
+    # split dataset ==========================================
+    if hp.SPLIT:
         train_set, val_set = DatasetSplit(dataset)
-    else :
-        train_set = dataset
-
-    # set DataLoader
-    train_dataloader = DataLoader(
-        train_set,
-        batch_size  = hp["BATCH_SIZE"],
-        shuffle     = True,
-        sampler     = None,
-        num_workers = 8,
-        drop_last   = True
-    )
-    if split:
         val_dataloader = DataLoader(
             val_set,
-            batch_size  = hp["BATCH_SIZE"],
-            shuffle     = None,
-            sampler     = None,
-            num_workers = 8,
-            drop_last   = True
+            batch_size=hp.BATCH_SIZE,
+            shuffle=False,
+            sampler=None,
+            num_workers=8,
+            drop_last=True
         )
+    else:
+        train_set = dataset
+        train_set.get_images()
+        val_dataloader = None
 
-    # single batch test
-    single_batch_X, single_batch_y = next(iter(train_dataloader))
-    print(single_batch_X.shape)
-    print(single_batch_y.shape)
-
-    DEVICE = hp["DEVICE"]
-
-    model = ModelLoader(
-        model_name = "resnet18",
-        input_shape = single_batch_X.shape,
-        pretrained = True,
-        initializer = None, #"kaiming_uniform_",
-        freeze_range = None,
-        device = DEVICE,
+    # set DataLoader =========================================
+    train_dataloader = DataLoader(
+        train_set,
+        batch_size=hp.BATCH_SIZE,
+        shuffle=True,
+        sampler=None,
+        num_workers=8,
+        drop_last=True
     )
 
+    # single batch test ========================================
+    single_batch_X, single_batch_y = next(iter(train_dataloader))
+    print("single_batch_X.shape ::: ", single_batch_X.shape)
+    print("single_batch_y.shape ::: ", single_batch_y.shape)
+    
+    # set Model ================================================
+    model = ModelLoader(
+        model_name="resnet18",
+        input_shape=single_batch_X.shape,
+        pretrained=True,
+        initializer=None,
+        freeze_range=None,
+        device=DEVICE,
+    )
+    
     model.last_layer_modifier(
-        in_features= 512,
+        in_features=512,
         out_features=18,
         bias=False,
-        W_initializer = "kaiming_uniform_",
-        b_initializer = "in_sqrt_uniform"
+        W_initializer="kaiming_uniform_",
+        b_initializer="in_sqrt_uniform"
     )
-    model.release_all_params()
-    
-    if arg.release_range > 0:
+
+    if hp.release_range == 0:
+        model.release_all_params()
+
+    elif hp.release_range > 0:
         model.freeze_all_params()
         model.release_with_range(
-            release_range = (-1 * arg.release_range, None)
+            release_range=(-1 * hp.release_range, None)
         )
+    else:
+        raise ValueError("Invalid release_range")
 
-
-    # set loss function
+    # set loss function ============================================
     loss_combination = CostumLoss(
-        lossfn      = hp["LOSS_1"],
-        lossfn_2    = hp["LOSS_2"],
-        p           = hp["Loos_2_portion"],
-        num_classes = len(dataset.classes),
-        device      = hp["DEVICE"],
+        lossfn=hp.LOSS_1,
+        lossfn_2=hp.LOSS_2,
+        p=hp.LOSS_2_PORTION,
+        num_classes=len(dataset.classes),
+        device=DEVICE,
     )
-
-
+    
+    # set optimizer ================================================
     opt = Optim(
-        arg.OPTIMIZER,
+        hp.OPTIMIZER,
         model.parameters(),
-        lr = hp["LEARNING_RATE"],
-        momentum = 0.99,
-        weight_decay = hp["WEIGHT_DECAY"]
+        lr=hp.LEARNING_RATE,
+        momentum=0.99,
+        weight_decay=hp.WEIGHT_DECAY
     )
 
-    scheduler = opt.set_scheduler(
-        "exponential_lr",
-        last_epoch = -1,
-        verbose=True,
-        lr_lambda = None,
-        gamma = 0.1,
-    )
-
-    # In[15]:
-
-    print(hp["EXP_NUM"])
-
-    tr_writer = SummaryWriter('logs/hp_tunning/exp_%s/tr'%hp["EXP_NUM"])
-    if split:
-        val_writer = SummaryWriter('logs/hp_tunning/exp_%s/val'%hp["EXP_NUM"])
-        hist_writer = SummaryWriter('logs/hp_tunning/exp_%s/hist'%hp["EXP_NUM"])
-        hp_writer = SummaryWriter('logs/hp_tunning/')
-
-    hist_log = False
-    global_step = 0
-    for ep in range(hp["TOTAL_EPOCH"] + 1):
-
-        #= Training phase =========
-        tr_mean_loss, tr_mean_f1, tr_acc = 0, 0, 0
-        for X, y in iter(train_dataloader):
-            global_step += 1
-
-            #= Zero epoch recording ==================
-            if not ep:
-                with torch.no_grad():
-                    model.eval()
-                    predict = model(X.to(DEVICE))
-
-                    loss_val = loss_combination(predict, y.to(DEVICE))
-                    tr_mean_loss += loss_val
-                    tr_mean_f1 += ( 1 - loss_combination.loss_2_val )
-
-                    _, argmax = torch.max(predict.data,1)
-                    tr_acc += (argmax==y.to(DEVICE)).sum().item()/arg.BATCH_SIZE
-
-            #= train epoch recording ==================
-            else:
-                model.train()
-                predict = model(X.to(DEVICE))
-
-                loss_val = loss_combination(predict, y.to(DEVICE))
-                tr_mean_loss += loss_val
-                tr_mean_f1 += ( 1 - loss_combination.loss_2_val )
-
-                _, argmax = torch.max(predict.data,1)
-                tr_acc += (argmax==y.to(DEVICE)).sum().item()/arg.BATCH_SIZE
-
-                # update
-                opt.zero_grad()
-                loss_val.backward()
-                opt.step()
-        
-        #scheduler.step()
-        tr_mean_loss = tr_mean_loss / len(train_dataloader)
-        tr_mean_f1 = tr_mean_f1 / len(train_dataloader)
-        tr_acc = tr_acc/len(train_dataloader)
-
-        if split:
-            #= Validation phase =============
-
-            label_cm = GetConfusionMatrix(
-                save_path        = 'confusion_matrix_image',
-                current_epoch    = ep,
-                n_classes        = len(dataset.classes),
-                only_wrong_label = False,
-                savefig          = "tensorboard",
-                tag              = 'exp_%s'%hp["EXP_NUM"],
-                image_name       = 'confusion_matrix',
-            )
-
-            val_mean_loss, val_mean_f1, val_acc = 0, 0, 0
-            with torch.no_grad():
-                for X, y in iter(val_dataloader):
-                    model.eval()
-                    predict = model(X.to(DEVICE))
-
-                    loss_val = loss_combination(predict, y.to(DEVICE))
-                    val_mean_loss += loss_val
-                    val_mean_f1 += ( 1 - loss_combination.loss_2_val )
-
-                    _, argmax = torch.max(predict.data,1)
-                    val_acc += (argmax==y.to(DEVICE)).sum().item()/arg.BATCH_SIZE
-
-                    label_cm.collect_batch_preds(
-                        y.to(DEVICE),
-                        torch.max(predict,dim=1)[1]
-                    )
-
-            val_mean_loss = val_mean_loss / len(val_dataloader)
-            val_mean_f1 = val_mean_f1 / len(val_dataloader)
-            val_acc = val_acc/len(val_dataloader)
-        
-        '''
-        #= Training writer =========
-        tr_writer.add_scalar('loss/CE', tr_mean_loss, ep)
-        tr_writer.add_scalar('score/acc', tr_acc, ep)
-        tr_writer.add_scalar('score/F1',tr_mean_f1, ep)
-        
-        if split:
-            label_cm.epoch_plot()
-            image = PIL.Image.open(label_cm.plot_buf)
-            image = transforms.ToTensor()(image).unsqueeze(0)
-            
-            #= Validation writer =========
-            val_writer.add_scalar('loss/CE', val_mean_loss, ep)
-            val_writer.add_scalar('score/acc', val_acc, ep)
-            val_writer.add_scalar('score/F1', val_mean_f1, ep)
-            val_writer.add_images('CM/comfusion_matrix', image, global_step=ep)
-            
-            #= histogram =================
-            if True :#hist_log :
-                for param_name, param in model.named_parameters():
-                    if param.requires_grad:
-                        if re.search("weight", param_name):
-                            tag = 'weight/'
-                        elif re.search("bias", param_name):
-                            tag = 'bias/'
-                        hist_writer.add_histogram(
-                            tag = tag + param_name,
-                            values = param,
-                            global_step=ep,
-                        )
-
-        print("ep : ", ep, end = '\r')
-
-        saved_model_path = './saved_model/model_%s/model/'%hp["EXP_NUM"]
-        os.makedirs(saved_model_path, exist_ok = True)
-        torch.save(model, saved_model_path+'ep_%d.pt'%ep)
-
-        saved_weights_path = './saved_model/model_%s/weights/'%hp["EXP_NUM"]
-        os.makedirs(saved_weights_path, exist_ok = True)
-        torch.save(model.state_dict(), saved_weights_path+'/ep_%d.pt'%ep)
-        '''
-    if split:
-        hp_writer.add_hparams(
-            hp,
-            {
-                "tr/loss/CE"      : tr_mean_loss,
-                "tr/score/F1"      : tr_mean_f1,
-                "tr/score/acc"    : tr_acc,
-                "val/loss/CE"     : val_mean_loss,
-                "val/score/F1"     : val_mean_f1,
-                "val/score/acc"   : val_acc,
-            },
-            run_name = f'exp_{hp["EXP_NUM"]}'
+    # TODO :: hp.scheduler_name 추가
+    if hp.SCHEDULER:
+        scheduler = opt.set_scheduler(
+            "exponential_lr",
+            last_epoch=-1,
+            verbose=True,
+            lr_lambda=None,
+            gamma=0.1,
         )
+    else:
+        scheduler = None
+
+    print("EXP_NUM ::: ", hp.EXP_NUM)
+    
+    # set writer =================================================
+    # TODO :: hp.logdir 추가
+    tr_writer = SummaryWriter('logs/exp_%s/tr' % hp.EXP_NUM)
+    val_writer = SummaryWriter('logs/exp_%s/val' % hp.EXP_NUM) if hp.SPLIT else None
+    hist_writer = SummaryWriter('logs/hist/exp_%s' % hp.EXP_NUM) if hp.HIST_LOG else None
+    
+    # run train loop =============================================
+    train_loop(
+        model,
+        hp,
+        DEVICE,
+        dataset,
+        train_dataloader,
+        val_dataloader,
+        loss_combination,
+        opt,
+        scheduler,
+        tr_writer,
+        val_writer,
+        hist_writer
+    )
+
+    # end of main() ==============================================
+
 if __name__ == "__main__":
     main()
-    
