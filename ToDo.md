@@ -32,7 +32,8 @@
     - [ ] 성별 라벨을 예측하는 모델을 hparams tunning으로 훈련해 보기
     - [ ] 나이 라벨을 예측하는 모델을 hparams tunning으로 훈련해 보기
     - [ ] 마스크 라벨을 예측하는 모델을 hparams tunning으로 훈련해 보기
-  - CAAE를 통해서 마스크, 성별, 나이 를 conditioning 할 수 있는가?
+  - [x]CAAE를 통해서 마스크, 성별, 나이 를 conditioning 할 수 있는가?
+    - 안된다.Generative model, self-supervised learing 더 공부할 것.
 
 ## DataLoader 설계
   - pre-transform과 tranform을 나눠서 동작시키면 feed에서 더 빠르게 연산이 가능하다.
