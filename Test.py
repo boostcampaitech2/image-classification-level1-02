@@ -16,12 +16,12 @@ class Test():
         
     def loadSavedFile(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         self.model.eval()
         return self.model
     
     def loadModelWeight(self, checkpoint):
-        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         self.model.eval()
         return self.model
 

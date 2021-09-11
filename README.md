@@ -16,13 +16,12 @@
 ```
 image-classification-level1-02/
 ├── input/
-│   └── data/
-│   	└── train/
-|			├── images/
-|			└── train.csv
-│   	└── eval/
-|			├── images/
-|			└── info.csv
+│   └── train/
+|		├── images/
+|		└── train.csv
+│   └── eval/
+|		├── images/
+|		└── info.csv
 ├── Dataset.py
 ├── Model.py
 ├── Test.py

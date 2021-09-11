@@ -1,10 +1,15 @@
 from torch.utils.data import Dataset
+import torch
 from tqdm import tqdm
 from PIL import Image
 import numpy as np
 import glob
 import cv2
 import os
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from functions import mapAgeGender
 
 from functions import mapMask, mapping_class
 
@@ -54,3 +59,36 @@ class TestDataset(Dataset):
         ### 각 이미지마다 전처리 가능
         X = self.transform(cv2.imread(self.X[idx]))
         return X
+
+def dataLoader(base_path, transform, batch_size=128):
+    ### Load data & Split train/valid ###
+    df = pd.read_csv(base_path + 'train.csv')
+    y_data = df.apply(lambda x: mapAgeGender(x['age'], x['gender']), axis=1)   # Age & Gender 분포 균등하게 split
+    x_train, x_val, y_train, y_val = train_test_split(df.index, y_data, test_size=0.2, random_state=42, stratify=y_data)
+    
+    # Load dataset
+    train_dataset = TrainValDataset(
+        base_path = base_path, 
+        data = df.loc[x_train], 
+        transform = transform,
+        name="Train dataset"
+    )
+    val_dataset = TrainValDataset(
+        base_path = base_path, 
+        data = df.loc[x_val], 
+        transform = transform,
+        name="Validation dataset"
+    )
+    
+    # DataLoader
+    trainloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        num_workers=1
+    )
+    valloader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        num_workers=1
+    )
+    return trainloader, valloader

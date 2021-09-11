@@ -1,52 +1,24 @@
 import torch
 import torchvision.transforms as transforms
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from Dataset import TrainValDataset
-from functions import mapAgeGender
 from Model import Resnet18Model
+from Dataset import dataLoader
 
 if __name__ == '__main__':
     
     DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # training set 있는 Path
-    BASE_PATH = 'input/data/train/'
+    BASE_PATH = 'input/train/'
     
     # Transforms
     transform = transforms.Compose([
         transforms.ToTensor(),
     ])
     
-    ### Load data & Split train/valid ###
-    df = pd.read_csv(BASE_PATH + 'train.csv')
-    y_data = df.apply(lambda x: mapAgeGender(x['age'], x['gender']), axis=1)   # Age & Gender 분포 균등하게 split
-    x_train, x_val, y_train, y_val = train_test_split(df.index, y_data, test_size=0.2, random_state=42, stratify=y_data)
-    
-    # Load dataset
-    train_dataset = TrainValDataset(
-        base_path = BASE_PATH, 
-        data = df.loc[x_train], 
-        transform = transform,
-        name="Train dataset"
-    )
-    val_dataset = TrainValDataset(
-        base_path = BASE_PATH, 
-        data = df.loc[x_val], 
-        transform = transform,
-        name="Validation dataset"
-    )
-    
-    # DataLoader
-    trainloader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=128,
-        num_workers=1
-    )
-    valloader = torch.utils.data.DataLoader(
-        val_dataset,
-        batch_size=128,
-        num_workers=1
+    trainloader, valloader = dataLoader(
+        BASE_PATH, 
+        transform=transform,
+        batch_size=2
     )
     
     ### Model ###
@@ -67,7 +39,7 @@ if __name__ == '__main__':
     
     ### Test ###
     print("### Test Start ###")
-    TEST_PATH = 'input/data/eval'
+    TEST_PATH = 'input/eval'
     model.test(
         test_dir=TEST_PATH,
         transform=transform,
