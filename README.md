@@ -51,8 +51,22 @@ Install packages :  `pip install -r requirements.txt`
 ## Train Model & Test & Save Result
 
 ```bash
-python main.py
+sh run.sh
 ```
+### run.sh
+```bash
+python main.py \
+--PATH '../input/data' \
+--BATCH_SIZE 128 \
+--SAVE true \
+--SAVE_PATH 'saved/' \
+--EPOCH 20
+```
+- ```--PATH```: ```train/```, ```eval/``` parent directory
+- ```--BATCH_SIZE```: Batch size (default=128)
+- ```--SAVE```: If want to save weights while training else remove this line
+- ```--SAVE_PATH```: Saving weights directory
+- ```--EPOCH```: Train epoch (default=20)
 
 ### Trained Model
 

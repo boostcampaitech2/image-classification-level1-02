@@ -20,10 +20,12 @@ class Resnet18Model(nn.Module):
 
     def fit(self, train_loader, val_loader, device, learning_rate=1e-5, epochs=20, save=False, saved_folder="saved", \
               train_writer=None, val_writer=None):
-        Train(
+        train = Train(
             model=self.model,
             train_loader=train_loader, 
-            val_loader=val_loader,
+            val_loader=val_loader
+        )
+        self.best_weight = train.train(
             device=device,
             num_classes=self.num_classes, 
             epochs=epochs, 

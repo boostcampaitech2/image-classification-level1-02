@@ -4,16 +4,18 @@ from tqdm import tqdm
 from functions import calculateAcc
 
 class Train():
-    def __init__(self, model, train_loader, val_loader, device, num_classes, learning_rate=1e-5, epochs=20, save=False, saved_folder="saved", \
+    def __init__(self, model, train_loader, val_loader):
+        self.model = model
+        self.trainloader = train_loader
+        self.valloader = val_loader
+    
+    def train(self, device, num_classes, learning_rate=1e-5, epochs=20, save=False, saved_folder="saved", \
               train_writer=None, val_writer=None):
-        '''
-        writer : tensorboard writer
-        '''
         if save and not os.path.isdir(saved_folder):
             os.mkdir(saved_folder)
         
         criterion = torch.nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
         best_val_loss = 1e9
         best_val_f1 = 0
@@ -22,12 +24,12 @@ class Train():
             epoch_loss = 0
             epoch_acc = 0
             epoch_f1_score = 0
-            model.train()
-            for (X_batch, y_batch) in tqdm(train_loader, desc=f"Epoch {e}"):
+            self.model.train()
+            for (X_batch, y_batch) in tqdm(self.trainloader, desc=f"Epoch {e}"):
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
 
                 optimizer.zero_grad()        
-                y_pred = model(X_batch)
+                y_pred = self.model(X_batch)
 
                 loss = criterion(y_pred, y_batch.squeeze())
                 acc = calculateAcc(y_pred, y_batch.squeeze(), num_classes=num_classes)
@@ -41,15 +43,15 @@ class Train():
 
             # validation set eval
             with torch.no_grad(): 
-                model.eval() 
+                self.model.eval() 
                 val_loss = 0
                 val_acc = 0
                 val_f1_score = 0
-                for x_val, y_val in val_loader:  
+                for x_val, y_val in self.valloader:  
                     x_val = x_val.to(device)  
                     y_val = y_val.to(device)   
 
-                    yhat = model(x_val)  
+                    yhat = self.model(x_val)  
                     val_loss += criterion(yhat, y_val.squeeze()).item()
                     acc = calculateAcc(yhat, y_val.squeeze(), num_classes=num_classes)
                     val_acc += acc[0]
@@ -58,23 +60,23 @@ class Train():
             # Tensorboard
             if train_writer:
                 train_writer.add_scalar('Loss/loss',
-                                    epoch_loss/len(train_loader),
+                                    epoch_loss/len(self.trainloader),
                                     e)
                 train_writer.add_scalar('Score/accuracy',
-                                    epoch_acc/len(train_loader),
+                                    epoch_acc/len(self.trainloader),
                                     e)
                 train_writer.add_scalar('Score/f1score',
-                                    epoch_f1_score/len(train_loader),
+                                    epoch_f1_score/len(self.trainloader),
                                     e)
             if val_writer:
                 val_writer.add_scalar('Loss/loss',
-                                    val_loss/len(val_loader),
+                                    val_loss/len(self.valloader),
                                     e)
                 val_writer.add_scalar('Score/accuracy',
-                                    val_acc/len(val_loader),
+                                    val_acc/len(self.valloader),
                                     e)
                 val_writer.add_scalar('Score/f1score',
-                                    val_f1_score/len(val_loader),
+                                    val_f1_score/len(self.valloader),
                                     e)
 
             if best_val_f1 <= val_f1_score and best_val_loss >= val_loss:
@@ -82,14 +84,15 @@ class Train():
                 best_val_f1 = val_f1_score
                 self.best_weight = {
                     'epoch': e,
-                    'model_state_dict': model.state_dict(),
+                    'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': val_loss,
                 }
                 print("best weight updated")
                 if save:
-                    torch.save(self.best_weight, f"{saved_folder}/resnet18_{e}_{epoch_loss/len(train_loader):.2f}_{epoch_acc/len(train_loader):.2f}.pt")
+                    torch.save(self.best_weight, f"{saved_folder}/resnet18_{e}_{epoch_loss/len(self.trainloader):.2f}_{epoch_acc/len(self.trainloader):.2f}.pt")
 
 
-            print(f'Epoch {e+0:03}: Loss: {epoch_loss/len(train_loader):.3f} / Acc: {epoch_acc/len(train_loader):.3f} / F1: {epoch_f1_score/len(train_loader):.2f}\
-            | Val Loss: {val_loss/len(val_loader):.3f} / Val Acc: {val_acc/len(val_loader):.3f} / Val F1: {val_f1_score/len(val_loader):.2f}')
+            print(f'Epoch {e+0:03}: Loss: {epoch_loss/len(self.trainloader):.3f} / Acc: {epoch_acc/len(self.trainloader):.3f} / F1: {epoch_f1_score/len(self.trainloader):.2f}\
+            | Val Loss: {val_loss/len(self.valloader):.3f} / Val Acc: {val_acc/len(self.valloader):.3f} / Val F1: {val_f1_score/len(self.valloader):.2f}')
+        return self.best_weight
